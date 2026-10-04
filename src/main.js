@@ -1,35 +1,22 @@
-/*
-    ROOM_01
-    ============================================================
+// ROOM_01
 
-    Experimental first-person horror environment.
+const canvas = document.getElementById("canvas");
+const intro = document.getElementById("intro");
 
-    Controls:
-
-        W / S       forward / backward
-        A / D       strafe
-        Mouse       look
-        R           restart
-        ESC         release mouse
-*/
-
-
-const canvas =
-    document.getElementById("canvas");
-
-const gl =
-    canvas.getContext("webgl");
+const gl = canvas.getContext("webgl", {
+    antialias: true,
+    alpha: false,
+    depth: true
+});
 
 if (!gl) {
-    throw new Error(
-        "WebGL is not supported."
-    );
+    throw new Error("WebGL is not supported.");
 }
 
 
-/* ============================================================
-   SHADERS
-   ============================================================ */
+// ============================================================
+// SHADERS
+// ============================================================
 
 const vertexShaderSource = `
 attribute vec3 aPosition;
@@ -40,35 +27,50 @@ uniform mat4 uView;
 uniform mat4 uModel;
 
 varying vec2 vUV;
+varying vec3 vWorldPosition;
 
 void main() {
+
+    vec4 worldPosition =
+        uModel * vec4(aPosition, 1.0);
+
+    vWorldPosition =
+        worldPosition.xyz;
 
     vUV = aUV;
 
     gl_Position =
         uProjection *
         uView *
-        uModel *
-        vec4(aPosition, 1.0);
+        worldPosition;
 }
 `;
-
 
 const fragmentShaderSource = `
 precision mediump float;
 
 uniform vec3 uColor;
-uniform float uBrightness;
 
 uniform sampler2D uTexture;
 uniform float uUseTexture;
 
+uniform vec3 uLightPosition;
+uniform float uLightIntensity;
+uniform float uLightRadius;
+
+uniform float uAmbient;
+
+uniform vec3 uCameraPosition;
+
+uniform float uFogStart;
+uniform float uFogEnd;
+
 varying vec2 vUV;
+varying vec3 vWorldPosition;
 
 void main() {
 
-    vec3 base =
-        uColor;
+    vec3 base = uColor;
 
     if (uUseTexture > 0.5) {
 
@@ -81,23 +83,88 @@ void main() {
         base *= tex.rgb;
     }
 
-    gl_FragColor =
-        vec4(
-            base * uBrightness,
-            1.0
+    // --------------------------------------------------------
+    // Fake point light.
+    // There are no normals in this intentionally simple
+    // renderer, so distance-based illumination is used.
+    // --------------------------------------------------------
+
+    float distanceToLight =
+        distance(
+            vWorldPosition,
+            uLightPosition
         );
+
+    float attenuation =
+        1.0 -
+        smoothstep(
+            0.0,
+            uLightRadius,
+            distanceToLight
+        );
+
+    float light =
+        uAmbient +
+        attenuation * uLightIntensity;
+
+    base *= light;
+
+    // --------------------------------------------------------
+    // Slight gamma lift.
+    // Prevents the dark procedural textures from becoming
+    // completely black.
+    // --------------------------------------------------------
+
+    base =
+        pow(
+            max(base, vec3(0.0)),
+            vec3(0.78)
+        );
+
+    // --------------------------------------------------------
+    // Distance fog.
+    // The corridor disappears gradually instead of ending
+    // abruptly in black.
+    // --------------------------------------------------------
+
+    float distanceToCamera =
+        distance(
+            vWorldPosition,
+            uCameraPosition
+        );
+
+    float fog =
+        smoothstep(
+            uFogStart,
+            uFogEnd,
+            distanceToCamera
+        );
+
+    vec3 fogColor =
+        vec3(
+            0.015,
+            0.014,
+            0.013
+        );
+
+    base =
+        mix(
+            base,
+            fogColor,
+            fog
+        );
+
+    gl_FragColor =
+        vec4(base, 1.0);
 }
 `;
 
 
-/* ============================================================
-   SHADER CREATION
-   ============================================================ */
+// ============================================================
+// SHADER HELPERS
+// ============================================================
 
-function compileShader(
-    type,
-    source
-) {
+function compileShader(type, source) {
 
     const shader =
         gl.createShader(type);
@@ -107,19 +174,19 @@ function compileShader(
         source
     );
 
-    gl.compileShader(
-        shader
-    );
+    gl.compileShader(shader);
 
-    if (
-        !gl.getShaderParameter(
-            shader,
-            gl.COMPILE_STATUS
-        )
-    ) {
+    if (!gl.getShaderParameter(
+        shader,
+        gl.COMPILE_STATUS
+    )) {
+
+        console.error(
+            gl.getShaderInfoLog(shader)
+        );
 
         throw new Error(
-            gl.getShaderInfoLog(shader)
+            "Shader compilation failed."
         );
     }
 
@@ -127,231 +194,166 @@ function compileShader(
 }
 
 
-const vertexShader =
-    compileShader(
-        gl.VERTEX_SHADER,
-        vertexShaderSource
+function createProgram(
+    vertexSource,
+    fragmentSource
+) {
+
+    const vertexShader =
+        compileShader(
+            gl.VERTEX_SHADER,
+            vertexSource
+        );
+
+    const fragmentShader =
+        compileShader(
+            gl.FRAGMENT_SHADER,
+            fragmentSource
+        );
+
+    const program =
+        gl.createProgram();
+
+    gl.attachShader(
+        program,
+        vertexShader
     );
 
-
-const fragmentShader =
-    compileShader(
-        gl.FRAGMENT_SHADER,
-        fragmentShaderSource
+    gl.attachShader(
+        program,
+        fragmentShader
     );
+
+    gl.linkProgram(program);
+
+    if (!gl.getProgramParameter(
+        program,
+        gl.LINK_STATUS
+    )) {
+
+        console.error(
+            gl.getProgramInfoLog(program)
+        );
+
+        throw new Error(
+            "Program linking failed."
+        );
+    }
+
+    return program;
+}
 
 
 const program =
-    gl.createProgram();
-
-gl.attachShader(
-    program,
-    vertexShader
-);
-
-gl.attachShader(
-    program,
-    fragmentShader
-);
-
-gl.linkProgram(
-    program
-);
-
-if (
-    !gl.getProgramParameter(
-        program,
-        gl.LINK_STATUS
-    )
-) {
-
-    throw new Error(
-        gl.getProgramInfoLog(program)
+    createProgram(
+        vertexShaderSource,
+        fragmentShaderSource
     );
-}
 
 gl.useProgram(program);
 
 
-/* ============================================================
-   LOCATIONS
-   ============================================================ */
+// ============================================================
+// LOCATIONS
+// ============================================================
 
-const positionLocation =
-    gl.getAttribLocation(
-        program,
-        "aPosition"
-    );
+const locations = {
 
-const uvLocation =
-    gl.getAttribLocation(
-        program,
-        "aUV"
-    );
+    position:
+        gl.getAttribLocation(
+            program,
+            "aPosition"
+        ),
 
-const projectionLocation =
-    gl.getUniformLocation(
-        program,
-        "uProjection"
-    );
+    uv:
+        gl.getAttribLocation(
+            program,
+            "aUV"
+        ),
 
-const viewLocation =
-    gl.getUniformLocation(
-        program,
-        "uView"
-    );
+    projection:
+        gl.getUniformLocation(
+            program,
+            "uProjection"
+        ),
 
-const modelLocation =
-    gl.getUniformLocation(
-        program,
-        "uModel"
-    );
+    view:
+        gl.getUniformLocation(
+            program,
+            "uView"
+        ),
 
-const colorLocation =
-    gl.getUniformLocation(
-        program,
-        "uColor"
-    );
+    model:
+        gl.getUniformLocation(
+            program,
+            "uModel"
+        ),
 
-const brightnessLocation =
-    gl.getUniformLocation(
-        program,
-        "uBrightness"
-    );
+    color:
+        gl.getUniformLocation(
+            program,
+            "uColor"
+        ),
 
-const textureLocation =
-    gl.getUniformLocation(
-        program,
-        "uTexture"
-    );
+    texture:
+        gl.getUniformLocation(
+            program,
+            "uTexture"
+        ),
 
-const useTextureLocation =
-    gl.getUniformLocation(
-        program,
-        "uUseTexture"
-    );
+    useTexture:
+        gl.getUniformLocation(
+            program,
+            "uUseTexture"
+        ),
 
+    lightPosition:
+        gl.getUniformLocation(
+            program,
+            "uLightPosition"
+        ),
 
-/* ============================================================
-   MATH
-   ============================================================ */
+    lightIntensity:
+        gl.getUniformLocation(
+            program,
+            "uLightIntensity"
+        ),
 
-function identity() {
+    lightRadius:
+        gl.getUniformLocation(
+            program,
+            "uLightRadius"
+        ),
 
-    return new Float32Array([
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1
-    ]);
-}
+    ambient:
+        gl.getUniformLocation(
+            program,
+            "uAmbient"
+        ),
 
+    cameraPosition:
+        gl.getUniformLocation(
+            program,
+            "uCameraPosition"
+        ),
 
-function multiply(a, b) {
+    fogStart:
+        gl.getUniformLocation(
+            program,
+            "uFogStart"
+        ),
 
-    const out =
-        new Float32Array(16);
-
-    for (
-        let column = 0;
-        column < 4;
-        column++
-    ) {
-
-        for (
-            let row = 0;
-            row < 4;
-            row++
-        ) {
-
-            out[
-                column * 4 + row
-            ] =
-                a[row] *
-                b[column * 4] +
-
-                a[4 + row] *
-                b[column * 4 + 1] +
-
-                a[8 + row] *
-                b[column * 4 + 2] +
-
-                a[12 + row] *
-                b[column * 4 + 3];
-        }
-    }
-
-    return out;
-}
+    fogEnd:
+        gl.getUniformLocation(
+            program,
+            "uFogEnd"
+        )
+};
 
 
-function translation(
-    x,
-    y,
-    z
-) {
-
-    const m =
-        identity();
-
-    m[12] = x;
-    m[13] = y;
-    m[14] = z;
-
-    return m;
-}
-
-
-function scale(
-    x,
-    y,
-    z
-) {
-
-    const m =
-        identity();
-
-    m[0] = x;
-    m[5] = y;
-    m[10] = z;
-
-    return m;
-}
-
-
-function rotationY(angle) {
-
-    const c =
-        Math.cos(angle);
-
-    const s =
-        Math.sin(angle);
-
-    return new Float32Array([
-        c, 0, -s, 0,
-        0, 1, 0, 0,
-        s, 0, c, 0,
-        0, 0, 0, 1
-    ]);
-}
-
-
-function rotationX(angle) {
-
-    const c =
-        Math.cos(angle);
-
-    const s =
-        Math.sin(angle);
-
-    return new Float32Array([
-        1, 0, 0, 0,
-        0, c, s, 0,
-        0, -s, c, 0,
-        0, 0, 0, 1
-    ]);
-}
-
+// ============================================================
+// MATH
+// ============================================================
 
 function perspective(
     fov,
@@ -361,7 +363,7 @@ function perspective(
 ) {
 
     const f =
-        1 /
+        1.0 /
         Math.tan(
             fov / 2
         );
@@ -395,176 +397,309 @@ function perspective(
 }
 
 
-/* ============================================================
-   CUBE GEOMETRY
-   ============================================================ */
+function normalize(v) {
 
-const cubePositions =
-    new Float32Array([
+    const length =
+        Math.hypot(
+            v[0],
+            v[1],
+            v[2]
+        );
 
-        // front
-        -0.5, -0.5, 0.5,
-         0.5, -0.5, 0.5,
-         0.5,  0.5, 0.5,
+    if (length === 0) {
+        return [0, 0, 0];
+    }
 
-        -0.5, -0.5, 0.5,
-         0.5,  0.5, 0.5,
-        -0.5,  0.5, 0.5,
+    return [
+        v[0] / length,
+        v[1] / length,
+        v[2] / length
+    ];
+}
 
-        // back
-         0.5, -0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        -0.5,  0.5, -0.5,
 
-         0.5, -0.5, -0.5,
-        -0.5,  0.5, -0.5,
-         0.5,  0.5, -0.5,
+function lookAt(
+    eye,
+    target,
+    up
+) {
 
-        // left
-        -0.5, -0.5, -0.5,
-        -0.5, -0.5,  0.5,
-        -0.5,  0.5,  0.5,
+    const z =
+        normalize([
+            eye[0] - target[0],
+            eye[1] - target[1],
+            eye[2] - target[2]
+        ]);
 
-        -0.5, -0.5, -0.5,
-        -0.5,  0.5,  0.5,
-        -0.5,  0.5, -0.5,
+    const x =
+        normalize([
+            up[1] * z[2] - up[2] * z[1],
+            up[2] * z[0] - up[0] * z[2],
+            up[0] * z[1] - up[1] * z[0]
+        ]);
 
-        // right
-         0.5, -0.5,  0.5,
-         0.5, -0.5, -0.5,
-         0.5,  0.5, -0.5,
+    const y = [
+        z[1] * x[2] - z[2] * x[1],
+        z[2] * x[0] - z[0] * x[2],
+        z[0] * x[1] - z[1] * x[0]
+    ];
 
-         0.5, -0.5,  0.5,
-         0.5,  0.5, -0.5,
-         0.5,  0.5,  0.5,
+    return new Float32Array([
 
-        // top
-        -0.5, 0.5, 0.5,
-         0.5, 0.5, 0.5,
-         0.5, 0.5, -0.5,
+        x[0],
+        y[0],
+        z[0],
+        0,
 
-        -0.5, 0.5, 0.5,
-         0.5, 0.5, -0.5,
-        -0.5, 0.5, -0.5,
+        x[1],
+        y[1],
+        z[1],
+        0,
 
-        // bottom
-        -0.5, -0.5, -0.5,
-         0.5, -0.5, -0.5,
-         0.5, -0.5, 0.5,
+        x[2],
+        y[2],
+        z[2],
+        0,
 
-        -0.5, -0.5, -0.5,
-         0.5, -0.5, 0.5,
-        -0.5, -0.5, 0.5
+        -(
+            x[0] * eye[0] +
+            x[1] * eye[1] +
+            x[2] * eye[2]
+        ),
+
+        -(
+            y[0] * eye[0] +
+            y[1] * eye[1] +
+            y[2] * eye[2]
+        ),
+
+        -(
+            z[0] * eye[0] +
+            z[1] * eye[1] +
+            z[2] * eye[2]
+        ),
+
+        1
     ]);
+}
 
 
-const cubeUV =
-    new Float32Array([
+function translation(
+    x,
+    y,
+    z
+) {
 
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1,
+    return new Float32Array([
 
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1,
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
 
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1,
-
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1,
-
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1,
-
-        0,0, 1,0, 1,1,
-        0,0, 1,1, 0,1
+        x, y, z, 1
     ]);
+}
 
 
-const positionBuffer =
+function scale(
+    x,
+    y,
+    z
+) {
+
+    return new Float32Array([
+
+        x, 0, 0, 0,
+        0, y, 0, 0,
+        0, 0, z, 0,
+
+        0, 0, 0, 1
+    ]);
+}
+
+
+function multiply(
+    a,
+    b
+) {
+
+    const out =
+        new Float32Array(16);
+
+    for (let row = 0; row < 4; row++) {
+
+        for (let col = 0; col < 4; col++) {
+
+            out[
+                col * 4 + row
+            ] =
+
+                a[0 * 4 + row] *
+                b[col * 4 + 0] +
+
+                a[1 * 4 + row] *
+                b[col * 4 + 1] +
+
+                a[2 * 4 + row] *
+                b[col * 4 + 2] +
+
+                a[3 * 4 + row] *
+                b[col * 4 + 3];
+        }
+    }
+
+    return out;
+}
+
+
+// ============================================================
+// CUBE
+// ============================================================
+
+const cubeVertices = new Float32Array([
+
+    // FRONT
+    -0.5, -0.5,  0.5,  0, 0,
+     0.5, -0.5,  0.5,  1, 0,
+     0.5,  0.5,  0.5,  1, 1,
+    -0.5,  0.5,  0.5,  0, 1,
+
+    // BACK
+     0.5, -0.5, -0.5,  0, 0,
+    -0.5, -0.5, -0.5,  1, 0,
+    -0.5,  0.5, -0.5,  1, 1,
+     0.5,  0.5, -0.5,  0, 1,
+
+    // LEFT
+    -0.5, -0.5, -0.5,  0, 0,
+    -0.5, -0.5,  0.5,  1, 0,
+    -0.5,  0.5,  0.5,  1, 1,
+    -0.5,  0.5, -0.5,  0, 1,
+
+    // RIGHT
+     0.5, -0.5,  0.5,  0, 0,
+     0.5, -0.5, -0.5,  1, 0,
+     0.5,  0.5, -0.5,  1, 1,
+     0.5,  0.5,  0.5,  0, 1,
+
+    // TOP
+    -0.5,  0.5,  0.5,  0, 0,
+     0.5,  0.5,  0.5,  1, 0,
+     0.5,  0.5, -0.5,  1, 1,
+    -0.5,  0.5, -0.5,  0, 1,
+
+    // BOTTOM
+    -0.5, -0.5, -0.5,  0, 0,
+     0.5, -0.5, -0.5,  1, 0,
+     0.5, -0.5,  0.5,  1, 1,
+    -0.5, -0.5,  0.5,  0, 1
+]);
+
+
+const cubeIndices = new Uint16Array([
+
+     0,  1,  2,
+     0,  2,  3,
+
+     4,  5,  6,
+     4,  6,  7,
+
+     8,  9, 10,
+     8, 10, 11,
+
+    12, 13, 14,
+    12, 14, 15,
+
+    16, 17, 18,
+    16, 18, 19,
+
+    20, 21, 22,
+    20, 22, 23
+]);
+
+
+const vertexBuffer =
     gl.createBuffer();
 
 gl.bindBuffer(
     gl.ARRAY_BUFFER,
-    positionBuffer
+    vertexBuffer
 );
 
 gl.bufferData(
     gl.ARRAY_BUFFER,
-    cubePositions,
+    cubeVertices,
     gl.STATIC_DRAW
 );
 
+
+const indexBuffer =
+    gl.createBuffer();
+
+gl.bindBuffer(
+    gl.ELEMENT_ARRAY_BUFFER,
+    indexBuffer
+);
+
+gl.bufferData(
+    gl.ELEMENT_ARRAY_BUFFER,
+    cubeIndices,
+    gl.STATIC_DRAW
+);
+
+
 gl.enableVertexAttribArray(
-    positionLocation
+    locations.position
+);
+
+gl.enableVertexAttribArray(
+    locations.uv
 );
 
 gl.vertexAttribPointer(
-    positionLocation,
+    locations.position,
     3,
     gl.FLOAT,
     false,
-    0,
+    20,
     0
-);
-
-
-const uvBuffer =
-    gl.createBuffer();
-
-gl.bindBuffer(
-    gl.ARRAY_BUFFER,
-    uvBuffer
-);
-
-gl.bufferData(
-    gl.ARRAY_BUFFER,
-    cubeUV,
-    gl.STATIC_DRAW
-);
-
-gl.enableVertexAttribArray(
-    uvLocation
 );
 
 gl.vertexAttribPointer(
-    uvLocation,
+    locations.uv,
     2,
     gl.FLOAT,
     false,
-    0,
-    0
+    20,
+    12
 );
 
 
-/* ============================================================
-   PROCEDURAL TEXTURES
-   ============================================================ */
+// ============================================================
+// PROCEDURAL TEXTURES
+// ============================================================
 
-function createTextureCanvas(
-    type,
-    seed
+const textures = {};
+
+
+function makeTexture(
+    type
 ) {
 
-    const size = 256;
+    const size = 512;
 
-    const c =
-        document.createElement(
-            "canvas"
-        );
+    const canvasTexture =
+        document.createElement("canvas");
 
-    c.width = size;
-    c.height = size;
+    canvasTexture.width = size;
+    canvasTexture.height = size;
 
     const ctx =
-        c.getContext("2d");
+        canvasTexture.getContext("2d");
 
-    /*
-        Base wall.
-    */
-
+    // Base
     ctx.fillStyle =
-        "#151513";
+        "#45413d";
 
     ctx.fillRect(
         0,
@@ -574,58 +709,39 @@ function createTextureCanvas(
     );
 
 
-    /*
-        Noise.
-    */
+    // --------------------------------------------------------
+    // NORMAL
+    // --------------------------------------------------------
 
-    for (
-        let i = 0;
-        i < 16000;
-        i++
-    ) {
+    if (type === "normal") {
 
-        const x =
-            Math.random() *
-            size;
+        for (let i = 0; i < 3000; i++) {
 
-        const y =
-            Math.random() *
-            size;
+            const x =
+                Math.random() * size;
 
-        const v =
-            Math.floor(
-                20 +
-                Math.random() * 35
+            const y =
+                Math.random() * size;
+
+            const v =
+                45 +
+                Math.random() * 35;
+
+            ctx.fillStyle =
+                `rgb(${v},${v - 2},${v - 5})`;
+
+            ctx.fillRect(
+                x,
+                y,
+                1 + Math.random() * 3,
+                1 + Math.random() * 3
             );
-
-        ctx.fillStyle =
-            `rgb(${v},${v},${v - 2})`;
-
-        ctx.fillRect(
-            x,
-            y,
-            1,
-            1
-        );
-    }
-
-
-    /*
-        Normal wall.
-    */
-
-    if (
-        type === "normal"
-    ) {
+        }
 
         ctx.strokeStyle =
-            "#242420";
+            "rgba(10,10,10,.25)";
 
-        for (
-            let y = 0;
-            y < size;
-            y += 64
-        ) {
+        for (let y = 0; y < size; y += 64) {
 
             ctx.beginPath();
 
@@ -644,107 +760,119 @@ function createTextureCanvas(
     }
 
 
-    /*
-        Writing physically painted on the wall.
-    */
+    // --------------------------------------------------------
+    // WRITING
+    // --------------------------------------------------------
 
-    if (
-        type === "writing"
-    ) {
-
-        ctx.strokeStyle =
-            "#681f1f";
+    if (type === "writing") {
 
         ctx.fillStyle =
-            "#702020";
+            "#403a36";
+
+        ctx.fillRect(
+            0,
+            0,
+            size,
+            size
+        );
 
         ctx.font =
-            "bold 27px Courier New";
+            "bold 31px Courier New";
 
-        const words = [
+        ctx.fillStyle =
+            "rgba(105,38,32,.8)";
+
+        const phrases = [
+
             "I SAW YOU",
+            "DO NOT LOOK",
             "NOT THIS WAY",
-            "DO NOT",
             "IT MOVED",
             "STAY",
             "BEHIND YOU",
-            "LOOK AGAIN"
+            "LOOK AGAIN",
+            "I REMEMBER",
+            "NO",
+            "STOP",
+            "YOU WERE HERE",
+            "WHY DID YOU TURN"
         ];
 
-        const word =
-            words[
-                seed %
-                words.length
-            ];
+        for (let i = 0; i < 18; i++) {
 
-        ctx.save();
+            const phrase =
+                phrases[
+                    Math.floor(
+                        Math.random() *
+                        phrases.length
+                    )
+                ];
 
-        ctx.translate(
-            128,
-            128
-        );
+            ctx.save();
 
-        ctx.rotate(
-            -0.04 +
-            Math.sin(seed) *
-            0.02
-        );
-
-        ctx.fillText(
-            word,
-            -95,
-            0
-        );
-
-        ctx.restore();
-
-
-        for (
-            let i = 0;
-            i < 15;
-            i++
-        ) {
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-                Math.random() * 256,
-                Math.random() * 256
+            ctx.translate(
+                Math.random() * size,
+                Math.random() * size
             );
 
-            ctx.lineTo(
-                Math.random() * 256,
-                Math.random() * 256
+            ctx.rotate(
+                (Math.random() - 0.5) *
+                0.35
             );
 
-            ctx.stroke();
+            ctx.fillText(
+                phrase,
+                0,
+                0
+            );
+
+            ctx.restore();
+        }
+
+        for (let i = 0; i < 1200; i++) {
+
+            ctx.fillStyle =
+                "rgba(15,10,10,.25)";
+
+            ctx.fillRect(
+                Math.random() * size,
+                Math.random() * size,
+                Math.random() * 4,
+                Math.random() * 4
+            );
         }
     }
 
 
-    /*
-        Face-like image.
-        It is deliberately ambiguous rather than a
-        conventional monster.
-    */
+    // --------------------------------------------------------
+    // FACE
+    // --------------------------------------------------------
 
-    if (
-        type === "face"
-    ) {
-
-        const cx = 128;
-        const cy = 128;
+    if (type === "face") {
 
         ctx.fillStyle =
-            "#292421";
+            "#373331";
+
+        ctx.fillRect(
+            0,
+            0,
+            size,
+            size
+        );
+
+        const cx = 256;
+        const cy = 260;
+
+        ctx.fillStyle =
+            "rgba(12,10,10,.9)";
 
         ctx.beginPath();
 
         ctx.ellipse(
             cx,
             cy,
-            72,
-            92,
+            135,
+            175,
             0,
             0,
             Math.PI * 2
@@ -752,17 +880,28 @@ function createTextureCanvas(
 
         ctx.fill();
 
+        // eyes
 
         ctx.fillStyle =
-            "#050505";
+            "#070707";
 
         ctx.beginPath();
 
         ctx.ellipse(
-            98,
-            115,
-            17,
-            25,
+            cx - 55,
+            cy - 35,
+            26,
+            12,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.ellipse(
+            cx + 55,
+            cy - 35,
+            26,
+            12,
             0,
             0,
             Math.PI * 2
@@ -770,14 +909,15 @@ function createTextureCanvas(
 
         ctx.fill();
 
+        // mouth
 
         ctx.beginPath();
 
         ctx.ellipse(
-            158,
-            115,
-            17,
-            25,
+            cx,
+            cy + 65,
+            58,
+            22,
             0,
             0,
             Math.PI * 2
@@ -785,187 +925,137 @@ function createTextureCanvas(
 
         ctx.fill();
 
+        // vertical corruption
 
-        /*
-            Mouth.
-        */
+        for (let i = 0; i < 90; i++) {
 
-        ctx.fillStyle =
-            "#090707";
+            ctx.fillStyle =
+                `rgba(0,0,0,${
+                    Math.random() * .35
+                })`;
 
-        ctx.beginPath();
-
-        ctx.ellipse(
-            128,
-            176,
-            44,
-            17,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-
-        /*
-            Vertical distortions.
-        */
-
-        ctx.strokeStyle =
-            "#471414";
-
-        ctx.lineWidth = 4;
-
-        for (
-            let i = 0;
-            i < 8;
-            i++
-        ) {
-
-            const x =
-                75 +
-                i * 15;
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-                x,
-                165
+            ctx.fillRect(
+                Math.random() * size,
+                0,
+                1 + Math.random() * 8,
+                size
             );
-
-            ctx.lineTo(
-                x +
-                Math.sin(i * seed) *
-                10,
-                225
-            );
-
-            ctx.stroke();
         }
     }
 
 
-    /*
-        Anatomical / organic wall.
-    */
+    // --------------------------------------------------------
+    // ORGANIC
+    // --------------------------------------------------------
 
-    if (
-        type === "organic"
-    ) {
+    if (type === "organic") {
 
         ctx.fillStyle =
-            "#391313";
+            "#382f2d";
 
-        for (
-            let i = 0;
-            i < 28;
-            i++
-        ) {
+        ctx.fillRect(
+            0,
+            0,
+            size,
+            size
+        );
 
-            const x =
-                Math.random() *
-                256;
+        ctx.strokeStyle =
+            "rgba(96,28,26,.85)";
 
-            const y =
-                Math.random() *
-                256;
+        ctx.lineWidth = 5;
 
-            const r =
-                4 +
-                Math.random() *
-                24;
+        for (let i = 0; i < 25; i++) {
 
             ctx.beginPath();
 
-            ctx.ellipse(
+            let x =
+                Math.random() * size;
+
+            let y = 0;
+
+            ctx.moveTo(
                 x,
-                y,
-                r,
-                r *
-                (
-                    0.5 +
-                    Math.random()
-                ),
-                Math.random(),
+                y
+            );
+
+            for (
+                let j = 0;
+                j < 8;
+                j++
+            ) {
+
+                x +=
+                    (Math.random() - .5) *
+                    100;
+
+                y +=
+                    40 +
+                    Math.random() * 80;
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
+            }
+
+            ctx.stroke();
+        }
+
+        for (let i = 0; i < 500; i++) {
+
+            ctx.fillStyle =
+                "rgba(80,20,18,.35)";
+
+            ctx.beginPath();
+
+            ctx.arc(
+                Math.random() * size,
+                Math.random() * size,
+                Math.random() * 8,
                 0,
                 Math.PI * 2
             );
 
             ctx.fill();
         }
-
-
-        ctx.strokeStyle =
-            "#551616";
-
-        ctx.lineWidth = 3;
-
-        for (
-            let i = 0;
-            i < 16;
-            i++
-        ) {
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-                Math.random() * 256,
-                0
-            );
-
-            ctx.bezierCurveTo(
-                Math.random() * 256,
-                80,
-                Math.random() * 256,
-                170,
-                Math.random() * 256,
-                256
-            );
-
-            ctx.stroke();
-        }
     }
 
 
-    /*
-        Extremely degraded image.
-    */
+    // --------------------------------------------------------
+    // CORRUPT
+    // --------------------------------------------------------
 
-    if (
-        type === "corrupt"
-    ) {
+    if (type === "corrupt") {
 
-        for (
-            let i = 0;
-            i < 80;
-            i++
-        ) {
+        ctx.fillStyle =
+            "#282523";
 
-            const x =
-                Math.random() * 256;
+        ctx.fillRect(
+            0,
+            0,
+            size,
+            size
+        );
 
-            const y =
-                Math.random() * 256;
-
-            const w =
-                2 +
-                Math.random() * 80;
-
-            const h =
-                2 +
-                Math.random() * 15;
+        for (let i = 0; i < 100; i++) {
 
             ctx.fillStyle =
-                Math.random() > 0.5
-                    ? "#050505"
-                    : "#481515";
+                Math.random() > .75
+                    ? "rgba(100,20,20,.8)"
+                    : "rgba(0,0,0,.7)";
 
             ctx.fillRect(
-                x,
-                y,
-                w,
-                h
+
+                Math.random() * size,
+
+                Math.random() * size,
+
+                20 +
+                Math.random() * 180,
+
+                3 +
+                Math.random() * 30
             );
         }
     }
@@ -985,13 +1075,13 @@ function createTextureCanvas(
         gl.RGBA,
         gl.RGBA,
         gl.UNSIGNED_BYTE,
-        c
+        canvasTexture
     );
 
     gl.texParameteri(
         gl.TEXTURE_2D,
         gl.TEXTURE_MIN_FILTER,
-        gl.LINEAR
+        gl.LINEAR_MIPMAP_LINEAR
     );
 
     gl.texParameteri(
@@ -1000,150 +1090,37 @@ function createTextureCanvas(
         gl.LINEAR
     );
 
-    gl.bindTexture(
-        gl.TEXTURE_2D,
-        null
+    gl.generateMipmap(
+        gl.TEXTURE_2D
     );
 
     return texture;
 }
 
 
-const textures = {
+textures.normal =
+    makeTexture("normal");
 
-    normal:
-        createTextureCanvas(
-            "normal",
-            1
-        ),
+textures.writing =
+    makeTexture("writing");
 
-    writing:
-        createTextureCanvas(
-            "writing",
-            17
-        ),
+textures.face =
+    makeTexture("face");
 
-    face:
-        createTextureCanvas(
-            "face",
-            31
-        ),
+textures.organic =
+    makeTexture("organic");
 
-    organic:
-        createTextureCanvas(
-            "organic",
-            47
-        ),
-
-    corrupt:
-        createTextureCanvas(
-            "corrupt",
-            71
-        )
-};
+textures.corrupt =
+    makeTexture("corrupt");
 
 
-/* ============================================================
-   DRAW
-   ============================================================ */
-
-function drawCube(
-    x,
-    y,
-    z,
-    sx,
-    sy,
-    sz,
-    color,
-    brightness = 1,
-    rotation = 0,
-    texture = null
-) {
-
-    let model =
-        translation(
-            x,
-            y,
-            z
-        );
-
-    model =
-        multiply(
-            model,
-            rotationY(rotation)
-        );
-
-    model =
-        multiply(
-            model,
-            scale(
-                sx,
-                sy,
-                sz
-            )
-        );
-
-    gl.uniformMatrix4fv(
-        modelLocation,
-        false,
-        model
-    );
-
-    gl.uniform3fv(
-        colorLocation,
-        color
-    );
-
-    gl.uniform1f(
-        brightnessLocation,
-        brightness
-    );
-
-    gl.uniform1f(
-        useTextureLocation,
-        texture ? 1 : 0
-    );
-
-    if (texture) {
-
-        gl.activeTexture(
-            gl.TEXTURE0
-        );
-
-        gl.bindTexture(
-            gl.TEXTURE_2D,
-            texture
-        );
-
-        gl.uniform1i(
-            textureLocation,
-            0
-        );
-    }
-
-    gl.drawArrays(
-        gl.TRIANGLES,
-        0,
-        36
-    );
-
-    if (texture) {
-
-        gl.bindTexture(
-            gl.TEXTURE_2D,
-            null
-        );
-    }
-}
-
-
-/* ============================================================
-   WORLD
-   ============================================================ */
+// ============================================================
+// WORLD
+// ============================================================
 
 const SEGMENT_LENGTH = 7;
-const WALL_HEIGHT = 4;
 const CORRIDOR_WIDTH = 5;
+const WALL_HEIGHT = 4;
 
 const world = {
 
@@ -1160,38 +1137,143 @@ const world = {
 
     presences: [],
 
-    lastSegment:
-        -1,
+    totalDistance: 0,
 
-    backwardsTravel:
-        0,
+    stoppedTime: 0,
 
-    totalDistance:
-        0,
+    lookingBack: 0,
 
-    stoppedTime:
-        0,
+    backwardsTravel: 0,
 
-    lookingBack:
-        0,
+    lastSegment: null,
 
-    lastLookYaw:
-        0,
+    lastZ: 0,
 
-    lastPlayerZ:
-        0,
+    lastYaw: 0,
 
-    lastDirection:
-        -1,
-
-    mutationCounter:
-        0
+    mutationCounter: 0
 };
 
 
-/* ============================================================
-   PLAYER
-   ============================================================ */
+function seededRandom(
+    seed
+) {
+
+    const x =
+        Math.sin(seed * 12.9898) *
+        43758.5453;
+
+    return (
+        x -
+        Math.floor(x)
+    );
+}
+
+
+function getSegment(
+    index
+) {
+
+    if (
+        world.generated.has(index)
+    ) {
+
+        return world.generated.get(
+            index
+        );
+    }
+
+    const r =
+        seededRandom(
+            world.seed +
+            index * 137.17
+        );
+
+    let texture =
+        "normal";
+
+    let chance =
+        r;
+
+    if (
+        world.intensity > .25 &&
+        chance < .16
+    ) {
+
+        texture =
+            "writing";
+    }
+
+    if (
+        world.intensity > .45 &&
+        chance < .08
+    ) {
+
+        texture =
+            "face";
+    }
+
+    if (
+        world.intensity > .60 &&
+        chance < .055
+    ) {
+
+        texture =
+            "organic";
+    }
+
+    if (
+        world.intensity > .80 &&
+        chance < .035
+    ) {
+
+        texture =
+            "corrupt";
+    }
+
+
+    const segment = {
+
+        index,
+
+        texture,
+
+        mutated: false,
+
+        visited: 0,
+
+        lightFailure:
+            seededRandom(
+                world.seed +
+                index * 31.7
+            ) < .08,
+
+        lightOffset:
+            seededRandom(
+                world.seed +
+                index * 91.1
+            ),
+
+        ceilingHeight:
+            3.7 +
+            seededRandom(
+                world.seed +
+                index * 5.3
+            ) * .4
+    };
+
+    world.generated.set(
+        index,
+        segment
+    );
+
+    return segment;
+}
+
+
+// ============================================================
+// PLAYER
+// ============================================================
 
 const player = {
 
@@ -1201,19 +1283,13 @@ const player = {
 
     z: 0,
 
-    yaw: 0,
+    yaw: Math.PI,
 
     pitch: 0,
 
-    targetYaw: 0,
+    speed: 2.65,
 
-    targetPitch: 0,
-
-    walkSpeed: 3.0,
-
-    bob: 0,
-
-    moving: false
+    radius: .42
 };
 
 
@@ -1225,21 +1301,14 @@ window.addEventListener(
     event => {
 
         keys[
-            event.code
+            event.key.toLowerCase()
         ] = true;
 
         if (
-            event.code === "KeyR"
+            event.key.toLowerCase() === "r"
         ) {
 
             location.reload();
-        }
-
-        if (
-            event.code === "Enter"
-        ) {
-
-            startGame();
         }
     }
 );
@@ -1250,23 +1319,26 @@ window.addEventListener(
     event => {
 
         keys[
-            event.code
+            event.key.toLowerCase()
         ] = false;
     }
 );
 
 
-/* ============================================================
-   CAMERA
-   ============================================================ */
+// ============================================================
+// MOUSE LOOK
+// ============================================================
 
 canvas.addEventListener(
     "click",
     () => {
 
-        startGame();
+        if (
+            document.pointerLockElement !== canvas
+        ) {
 
-        canvas.requestPointerLock();
+            canvas.requestPointerLock();
+        }
     }
 );
 
@@ -1276,476 +1348,455 @@ document.addEventListener(
     event => {
 
         if (
-            document.pointerLockElement !==
-            canvas
+            document.pointerLockElement !== canvas
         ) {
-
             return;
         }
 
-        player.targetYaw -=
+        player.yaw -=
             event.movementX *
-            0.0019;
+            0.0022;
 
-        player.targetPitch -=
+        player.pitch -=
             event.movementY *
-            0.00125;
+            0.0022;
 
-        /*
-            This is a walking camera.
+        // Do not allow the camera to become
+        // an aircraft/free-flight camera.
 
-            Pitch is deliberately limited.
-            The player cannot tilt the world over.
-        */
-
-        player.targetPitch =
+        player.pitch =
             Math.max(
-                -0.95,
+                -0.82,
                 Math.min(
-                    0.95,
-                    player.targetPitch
+                    0.82,
+                    player.pitch
                 )
             );
     }
 );
 
 
-/* ============================================================
-   AUDIO
-   ============================================================ */
+// ============================================================
+// AUDIO
+// ============================================================
 
-let audio =
-    null;
-
-let master =
-    null;
-
-let drone =
-    null;
+let audioContext = null;
+let drone = null;
+let droneGain = null;
 
 
-function initAudio() {
+function startAudio() {
 
-    if (audio) {
+    if (audioContext) {
         return;
     }
 
-    audio =
+    audioContext =
         new (
             window.AudioContext ||
             window.webkitAudioContext
         )();
 
-    master =
-        audio.createGain();
-
-    master.gain.value =
-        0.24;
-
-    master.connect(
-        audio.destination
-    );
-
-
     drone =
-        audio.createOscillator();
+        audioContext.createOscillator();
 
-    const droneGain =
-        audio.createGain();
+    droneGain =
+        audioContext.createGain();
 
     drone.type =
         "sine";
 
     drone.frequency.value =
-        41;
+        43;
 
     droneGain.gain.value =
-        0.035;
+        0.018;
 
     drone.connect(
         droneGain
     );
 
     droneGain.connect(
-        master
+        audioContext.destination
     );
 
     drone.start();
 }
 
 
-function tone(
+function playTone(
     frequency,
     duration,
-    volume = 0.08,
-    type = "sine"
+    volume
 ) {
 
-    if (!audio) {
+    if (!audioContext) {
         return;
     }
 
     const oscillator =
-        audio.createOscillator();
+        audioContext.createOscillator();
 
     const gain =
-        audio.createGain();
+        audioContext.createGain();
 
     oscillator.type =
-        type;
+        "sine";
 
     oscillator.frequency.value =
         frequency;
 
-    gain.gain.setValueAtTime(
-        0.0001,
-        audio.currentTime
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        volume,
-        audio.currentTime + 0.02
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        audio.currentTime +
-        duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(master);
-
-    oscillator.start();
-
-    oscillator.stop(
-        audio.currentTime +
-        duration
-    );
-}
-
-
-function noise(
-    duration = 0.2,
-    volume = 0.08
-) {
-
-    if (!audio) {
-        return;
-    }
-
-    const buffer =
-        audio.createBuffer(
-            1,
-            audio.sampleRate *
-            duration,
-            audio.sampleRate
-        );
-
-    const data =
-        buffer.getChannelData(0);
-
-    for (
-        let i = 0;
-        i < data.length;
-        i++
-    ) {
-
-        data[i] =
-            Math.random() * 2 - 1;
-    }
-
-    const source =
-        audio.createBufferSource();
-
-    const gain =
-        audio.createGain();
-
-    source.buffer =
-        buffer;
-
     gain.gain.value =
         volume;
 
-    source.connect(gain);
-    gain.connect(master);
+    oscillator.connect(
+        gain
+    );
 
-    source.start();
-}
+    gain.connect(
+        audioContext.destination
+    );
 
-
-function footstep(
-    pan = 0
-) {
-
-    if (!audio) {
-        return;
-    }
-
-    const oscillator =
-        audio.createOscillator();
-
-    const gain =
-        audio.createGain();
-
-    const stereo =
-        audio.createStereoPanner();
-
-    oscillator.type =
-        "triangle";
-
-    oscillator.frequency.value =
-        55 +
-        Math.random() * 18;
-
-    stereo.pan.value =
-        pan;
+    const now =
+        audioContext.currentTime;
 
     gain.gain.setValueAtTime(
-        0.0001,
-        audio.currentTime
+        volume,
+        now
     );
 
     gain.gain.exponentialRampToValueAtTime(
-        0.10,
-        audio.currentTime + 0.01
+        0.001,
+        now + duration
     );
 
-    gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        audio.currentTime + 0.17
-    );
-
-    oscillator.connect(gain);
-    gain.connect(stereo);
-    stereo.connect(master);
-
-    oscillator.start();
+    oscillator.start(now);
 
     oscillator.stop(
-        audio.currentTime + 0.18
+        now + duration
     );
 }
 
 
-/* ============================================================
-   GAME START
-   ============================================================ */
+// ============================================================
+// PRESENCES
+// ============================================================
 
-let started = false;
+function spawnPresence(
+    x,
+    z,
+    mode = "far"
+) {
 
-
-function startGame() {
-
-    if (started) {
+    if (
+        world.presences.length >= 5
+    ) {
         return;
     }
 
-    started = true;
+    world.presences.push({
 
-    initAudio();
+        x,
 
-    document
-        .getElementById("intro")
-        .classList.add(
-            "hidden"
-        );
+        y: 0,
+
+        z,
+
+        mode,
+
+        age: 0,
+
+        visibleTime: 0,
+
+        speed:
+            mode === "approach"
+                ? 0.12
+                : 0
+    });
 }
 
 
-/* ============================================================
-   SEEING / LOOKING
-   ============================================================ */
-
-function angleDifference(
-    a,
-    b
+function maybeSpawnPresence(
+    segment
 ) {
 
-    let d =
-        a - b;
+    const intensity =
+        world.intensity;
 
-    while (
-        d > Math.PI
+    if (
+        intensity < .25
     ) {
-        d -=
-            Math.PI * 2;
+        return;
     }
 
-    while (
-        d < -Math.PI
-    ) {
-        d +=
-            Math.PI * 2;
-    }
-
-    return d;
-}
-
-
-function objectInView(
-    x,
-    z,
-    maximumAngle = 0.35
-) {
-
-    const dx =
-        x - player.x;
-
-    const dz =
-        z - player.z;
-
-    const angle =
-        Math.atan2(
-            dx,
-            -dz
-        );
-
-    return (
+    const distance =
         Math.abs(
-            angleDifference(
-                angle,
-                player.yaw
-            )
-        ) <
-        maximumAngle
+            segment.index *
+            SEGMENT_LENGTH -
+            player.z
+        );
+
+    if (
+        distance < 10
+    ) {
+        return;
+    }
+
+    let probability =
+        0.002 +
+        intensity *
+        0.004;
+
+    if (
+        world.stoppedTime > 8
+    ) {
+
+        probability +=
+            0.018;
+    }
+
+    if (
+        world.lookingBack > 1.3
+    ) {
+
+        probability +=
+            0.025;
+    }
+
+    if (
+        Math.random() <
+        probability
+    ) {
+
+        const direction =
+            player.z >
+            segment.index *
+            SEGMENT_LENGTH
+                ? 1
+                : -1;
+
+        spawnPresence(
+
+            player.x,
+
+            segment.index *
+                SEGMENT_LENGTH +
+                direction *
+                4,
+
+            intensity > .7
+                ? "approach"
+                : "far"
+        );
+
+        playTone(
+            61 +
+            Math.random() * 20,
+            1.4,
+            .025
+        );
+    }
+}
+
+
+function maybeSpawnBehind() {
+
+    if (
+        world.intensity < .35
+    ) {
+        return;
+    }
+
+    if (
+        world.presences.length >= 5
+    ) {
+        return;
+    }
+
+    if (
+        Math.random() >
+        0.025 +
+        world.intensity * 0.035
+    ) {
+        return;
+    }
+
+    const forward = {
+
+        x:
+            -Math.sin(player.yaw),
+
+        z:
+            -Math.cos(player.yaw)
+    };
+
+    spawnPresence(
+
+        player.x -
+        forward.x * 8,
+
+        player.z -
+        forward.z * 8,
+
+        "far"
+    );
+
+    playTone(
+        49,
+        1.8,
+        .018
     );
 }
 
 
-/* ============================================================
-   SEGMENTS
-   ============================================================ */
+// ============================================================
+// MOVEMENT
+// ============================================================
 
-function getSegment(
-    index
+function updatePlayer(
+    dt
 ) {
 
-    if (
-        !world.generated.has(index)
-    ) {
+    let forward = 0;
+    let strafe = 0;
 
-        const random =
-            seededRandom(
-                index +
-                world.seed
+    if (keys["w"]) {
+        forward += 1;
+    }
+
+    if (keys["s"]) {
+        forward -= 1;
+    }
+
+    if (keys["a"]) {
+        strafe -= 1;
+    }
+
+    if (keys["d"]) {
+        strafe += 1;
+    }
+
+    const moving =
+        forward !== 0 ||
+        strafe !== 0;
+
+    if (moving) {
+
+        const length =
+            Math.hypot(
+                forward,
+                strafe
             );
 
-        world.generated.set(
-            index,
-            {
-                wallTypeLeft:
-                    random(),
+        forward /= length;
+        strafe /= length;
 
-                wallTypeRight:
-                    random(),
+        const forwardX =
+            -Math.sin(player.yaw);
 
-                mutation:
-                    random(),
+        const forwardZ =
+            -Math.cos(player.yaw);
 
-                presence:
-                    random()
-            }
-        );
-    }
+        const rightX =
+            Math.cos(player.yaw);
 
-    return world.generated.get(
-        index
-    );
-}
+        const rightZ =
+            -Math.sin(player.yaw);
 
+        const movementX =
+            (
+                forwardX *
+                forward +
 
-function seededRandom(
-    value
-) {
+                rightX *
+                strafe
+            ) *
+            player.speed *
+            dt;
 
-    const x =
-        Math.sin(value * 12.9898) *
-        43758.5453;
+        const movementZ =
+            (
+                forwardZ *
+                forward +
 
-    return (
-        x -
-        Math.floor(x)
-    );
-}
+                rightZ *
+                strafe
+            ) *
+            player.speed *
+            dt;
 
+        player.x += movementX;
 
-/* ============================================================
-   DYNAMIC HORROR SYSTEM
-   ============================================================ */
+        player.z += movementZ;
 
-function updateWorld(
-    delta
-) {
+        // Corridor walls.
+        player.x =
+            Math.max(
+                -CORRIDOR_WIDTH / 2 +
+                player.radius,
 
-    const currentSegment =
-        Math.floor(
-            Math.abs(player.z) /
-            SEGMENT_LENGTH
-        );
+                Math.min(
+                    CORRIDOR_WIDTH / 2 -
+                    player.radius,
 
-    /*
-        Detect movement.
-    */
+                    player.x
+                )
+            );
 
-    const moved =
-        Math.abs(
-            player.z -
-            world.lastPlayerZ
-        );
+        world.totalDistance +=
+            Math.hypot(
+                movementX,
+                movementZ
+            );
 
-    if (
-        moved < 0.002
-    ) {
-
-        world.stoppedTime +=
-            delta;
+        world.stoppedTime = 0;
 
     } else {
 
-        world.stoppedTime = 0;
+        world.stoppedTime +=
+            dt;
     }
 
 
-    /*
-        Detect turning around.
+    // --------------------------------------------------------
+    // Looking backwards
+    // --------------------------------------------------------
 
-        Looking backwards for a while becomes a game mechanic.
-    */
-
-    const lookChange =
+    let yawDelta =
         Math.abs(
-            angleDifference(
-                player.yaw,
-                world.lastLookYaw
-            )
+            player.yaw -
+            world.lastYaw
         );
 
+    if (yawDelta > Math.PI) {
+        yawDelta =
+            Math.PI * 2 -
+            yawDelta;
+    }
+
     if (
-        lookChange >
-        2.2
+        Math.abs(
+            player.yaw -
+            world.lastYaw
+        ) > 0.7
     ) {
 
         world.lookingBack +=
-            delta;
-
+            dt;
     } else {
 
         world.lookingBack *=
-            0.95;
+            0.94;
     }
 
+    world.lastYaw =
+        player.yaw;
 
-    /*
-        Distance contributes to intensity,
-        but it does NOT directly schedule events.
-    */
 
-    world.totalDistance =
-        Math.max(
-            world.totalDistance,
-            Math.abs(player.z)
-        );
+    // --------------------------------------------------------
+    // World intensity is based on exploration.
+    // No clock-based progression.
+    // --------------------------------------------------------
 
     world.intensity =
         Math.min(
@@ -1755,1496 +1806,1018 @@ function updateWorld(
         );
 
 
-    /*
-        Backtracking is important.
-
-        Returning to an already visited area increases
-        the chance that it has changed.
-    */
-
     if (
-        currentSegment !==
-        world.lastSegment
+        player.z <
+        world.lastZ - 0.01
     ) {
 
+        world.backwardsTravel +=
+            dt;
+
+    } else {
+
+        world.backwardsTravel *=
+            0.96;
+    }
+
+    world.lastZ =
+        player.z;
+}
+
+
+// ============================================================
+// SEGMENT STATE
+// ============================================================
+
+function updateWorld() {
+
+    const segmentIndex =
+        Math.floor(
+            player.z /
+            SEGMENT_LENGTH
+        );
+
+    const segment =
+        getSegment(
+            segmentIndex
+        );
+
+    if (
+        world.lastSegment !==
+        segmentIndex
+    ) {
+
+        world.lastSegment =
+            segmentIndex;
+
+        segment.visited++;
+
         if (
-            world.visited.has(
-                currentSegment
-            )
+            segment.visited > 1
         ) {
 
-            world.backwardsTravel += 1;
-
             mutateSegment(
-                currentSegment
+                segment
             );
         }
 
         world.visited.set(
-            currentSegment,
-            {
-                visits:
-                    (
-                        world.visited.get(
-                            currentSegment
-                        )?.visits ||
-                        0
-                    ) + 1
-            }
+            segmentIndex,
+            segment.visited
         );
-
-        evaluateSegment(
-            currentSegment
-        );
-
-        world.lastSegment =
-            currentSegment;
     }
 
-
-    /*
-        Standing still can cause a presence to appear
-        much later than expected.
-    */
-
-    if (
-        world.stoppedTime >
-        8 &&
-        world.intensity >
-        0.15
-    ) {
-
-        maybeSpawnPresence(
-            currentSegment,
-            true
-        );
-
-        world.stoppedTime = 0;
-    }
-
-
-    /*
-        Looking behind is a strong trigger,
-        but has no fixed timing.
-    */
-
-    if (
-        world.lookingBack >
-        1.3 &&
-        world.intensity >
-        0.22
-    ) {
-
-        maybeSpawnBehind(
-            currentSegment
-        );
-
-        world.lookingBack = 0;
-    }
-
-
-    updatePresences(
-        delta
+    maybeSpawnPresence(
+        segment
     );
 
+    if (
+        world.lookingBack > 1.3
+    ) {
 
-    world.lastPlayerZ =
-        player.z;
-
-    world.lastLookYaw =
-        player.yaw;
+        maybeSpawnBehind();
+    }
 }
 
 
-/* ============================================================
-   SEGMENT EVALUATION
-   ============================================================ */
-
-function evaluateSegment(
-    index
+function mutateSegment(
+    segment
 ) {
 
-    const segment =
-        getSegment(index);
-
-    const random =
-        Math.random();
-
-    /*
-        The first few metres remain deliberately boring.
-    */
-
     if (
-        index < 3
+        segment.mutated
     ) {
         return;
     }
 
-
-    /*
-        Probability depends on intensity.
-    */
-
-    const intensity =
-        world.intensity;
-
-
-    /*
-        WALL WRITING
-    */
-
-    if (
-        random <
-        0.10 +
-        intensity * 0.14
-    ) {
-
-        segment.wallTypeLeft =
-            "writing";
-    }
-
-
-    /*
-        FACE / PHOTOGRAPH
-    */
-
-    if (
-        random <
-        Math.max(
-            0,
-            intensity - 0.22
-        ) *
-        0.22
-    ) {
-
-        segment.wallTypeRight =
-            "face";
-    }
-
-
-    /*
-        ORGANIC WALL
-    */
-
-    if (
-        random <
-        Math.max(
-            0,
-            intensity - 0.48
-        ) *
-        0.30
-    ) {
-
-        if (
-            random > 0.5
-        ) {
-
-            segment.wallTypeLeft =
-                "organic";
-
-        } else {
-
-            segment.wallTypeRight =
-                "organic";
-        }
-    }
-
-
-    /*
-        CORRUPTION
-    */
-
-    if (
-        random <
-        Math.max(
-            0,
-            intensity - 0.72
-        ) *
-        0.45
-    ) {
-
-        segment.wallTypeLeft =
-            "corrupt";
-
-        segment.wallTypeRight =
-            "corrupt";
-    }
-
-
-    /*
-        PRESENCE
-
-        A presence is not guaranteed.
-        Some runs remain empty.
-    */
-
-    if (
-        random <
-        (
-            0.025 +
-            intensity * 0.09
-        )
-    ) {
-
-        maybeSpawnPresence(
-            index,
-            false
-        );
-    }
-}
-
-
-/* ============================================================
-   MUTATION
-   ============================================================ */
-
-function mutateSegment(
-    index
-) {
-
-    const segment =
-        getSegment(index);
-
-    world.mutationCounter++;
-
-
-    const severity =
-        Math.min(
-            1,
-            world.intensity +
-            world.backwardsTravel *
-            0.06
-        );
-
+    segment.mutated = true;
 
     const roll =
         Math.random();
 
-
     if (
-        severity >
-        0.25 &&
-        roll < 0.35
+        world.intensity > .3 &&
+        roll < .45
     ) {
 
-        segment.wallTypeLeft =
+        segment.texture =
             "writing";
     }
 
-
     if (
-        severity >
-        0.4 &&
-        roll > 0.35 &&
-        roll < 0.62
+        world.intensity > .55 &&
+        roll < .25
     ) {
 
-        segment.wallTypeRight =
+        segment.texture =
             "face";
     }
 
-
     if (
-        severity >
-        0.6 &&
-        roll >= 0.62 &&
-        roll < 0.84
+        world.intensity > .7 &&
+        roll < .16
     ) {
 
-        segment.wallTypeLeft =
+        segment.texture =
             "organic";
     }
 
-
     if (
-        severity >
-        0.8 &&
-        roll >= 0.84
+        world.intensity > .85 &&
+        roll < .08
     ) {
 
-        segment.wallTypeRight =
+        segment.texture =
             "corrupt";
-
-        segment.wallTypeLeft =
-            "organic";
     }
 
+    world.mutationCounter++;
 
-    /*
-        Something has changed.
-    */
-
-    tone(
-        27,
-        0.8,
-        0.055
+    playTone(
+        35 +
+        Math.random() * 15,
+        2.5,
+        .012
     );
 }
 
 
-/* ============================================================
-   PRESENCES
-   ============================================================ */
+// ============================================================
+// DRAW HELPERS
+// ============================================================
 
-function maybeSpawnPresence(
-    segmentIndex,
-    fromStillness
-) {
+function drawCube({
+    x,
+    y,
+    z,
+    sx,
+    sy,
+    sz,
+    color,
+    texture = null
+}) {
 
-    /*
-        Don't flood the corridor.
-    */
-
-    if (
-        world.presences.length >= 3
-    ) {
-        return;
-    }
-
-
-    /*
-        Don't put something directly beside the player.
-    */
-
-    const distance =
-        25 +
-        Math.random() *
-        (
-            55 +
-            world.intensity *
-            20
+    const model =
+        multiply(
+            translation(
+                x,
+                y,
+                z
+            ),
+            scale(
+                sx,
+                sy,
+                sz
+            )
         );
 
+    gl.uniformMatrix4fv(
+        locations.model,
+        false,
+        model
+    );
 
-    const direction =
-        Math.random() >
-        0.72
-            ? 1
-            : -1;
+    gl.uniform3fv(
+        locations.color,
+        color
+    );
 
+    if (texture) {
+
+        gl.activeTexture(
+            gl.TEXTURE0
+        );
+
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            texture
+        );
+
+        gl.uniform1i(
+            locations.texture,
+            0
+        );
+
+        gl.uniform1f(
+            locations.useTexture,
+            1
+        );
+
+    } else {
+
+        gl.uniform1f(
+            locations.useTexture,
+            0
+        );
+    }
+
+    gl.drawElements(
+        gl.TRIANGLES,
+        cubeIndices.length,
+        gl.UNSIGNED_SHORT,
+        0
+    );
+}
+
+
+// ============================================================
+// CORRIDOR
+// ============================================================
+
+function drawSegment(
+    segment
+) {
 
     const z =
-        player.z +
-        direction *
-        distance;
+        segment.index *
+        SEGMENT_LENGTH;
+
+    const wallTexture =
+        textures[
+            segment.texture
+        ] ||
+        textures.normal;
 
 
-    /*
-        Mostly ahead.
+    // --------------------------------------------------------
+    // Floor
+    // --------------------------------------------------------
 
-        Occasionally behind.
-    */
+    drawCube({
 
-    const presence = {
+        x: 0,
+
+        y: -0.05,
+
+        z:
+            z +
+            SEGMENT_LENGTH / 2,
+
+        sx:
+            CORRIDOR_WIDTH,
+
+        sy:
+            0.1,
+
+        sz:
+            SEGMENT_LENGTH,
+
+        color: [
+            0.42,
+            0.40,
+            0.37
+        ],
+
+        texture:
+            textures.normal
+    });
+
+
+    // --------------------------------------------------------
+    // Ceiling
+    // --------------------------------------------------------
+
+    drawCube({
+
+        x: 0,
+
+        y:
+            segment.ceilingHeight,
+
+        z:
+            z +
+            SEGMENT_LENGTH / 2,
+
+        sx:
+            CORRIDOR_WIDTH,
+
+        sy:
+            0.12,
+
+        sz:
+            SEGMENT_LENGTH,
+
+        color: [
+            0.30,
+            0.29,
+            0.27
+        ],
+
+        texture:
+            textures.normal
+    });
+
+
+    // --------------------------------------------------------
+    // Left wall
+    // --------------------------------------------------------
+
+    drawCube({
 
         x:
-            Math.random() >
-            0.5
-                ? -1.5
-                : 1.5,
+            -CORRIDOR_WIDTH / 2,
+
+        y:
+            segment.ceilingHeight / 2,
+
+        z:
+            z +
+            SEGMENT_LENGTH / 2,
+
+        sx:
+            0.12,
+
+        sy:
+            segment.ceilingHeight,
+
+        sz:
+            SEGMENT_LENGTH,
+
+        color: [
+            0.48,
+            0.46,
+            0.43
+        ],
+
+        texture:
+            wallTexture
+    });
+
+
+    // --------------------------------------------------------
+    // Right wall
+    // --------------------------------------------------------
+
+    drawCube({
+
+        x:
+            CORRIDOR_WIDTH / 2,
+
+        y:
+            segment.ceilingHeight / 2,
+
+        z:
+            z +
+            SEGMENT_LENGTH / 2,
+
+        sx:
+            0.12,
+
+        sy:
+            segment.ceilingHeight,
+
+        sz:
+            SEGMENT_LENGTH,
+
+        color: [
+            0.48,
+            0.46,
+            0.43
+        ],
+
+        texture:
+            wallTexture
+    });
+
+
+    // --------------------------------------------------------
+    // Ceiling light
+    // --------------------------------------------------------
+
+    if (
+        !segment.lightFailure
+    ) {
+
+        drawCube({
+
+            x: 0,
+
+            y:
+                segment.ceilingHeight -
+                0.08,
+
+            z:
+                z +
+                SEGMENT_LENGTH / 2,
+
+            sx:
+                1.2,
+
+            sy:
+                0.035,
+
+            sz:
+                0.22,
+
+            color: [
+                1.0,
+                0.92,
+                0.78
+            ]
+        });
+    }
+}
+
+
+// ============================================================
+// PRESENCE DRAWING
+// ============================================================
+
+function drawPresence(
+    presence
+) {
+
+    const x =
+        presence.x;
+
+    const z =
+        presence.z;
+
+    const bodyColor = [
+        0.055,
+        0.052,
+        0.05
+    ];
+
+
+    // torso
+
+    drawCube({
+
+        x,
+
+        y: 1.15,
 
         z,
 
-        height:
-            1.7 +
-            Math.random() *
-            0.5,
+        sx: 0.48,
 
-        scale:
-            0.75 +
-            Math.random() *
-            0.45,
+        sy: 1.65,
 
-        active: true,
+        sz: 0.30,
 
-        seen: false,
-
-        born:
-            performance.now(),
-
-        phase:
-            Math.random() *
-            100,
-
-        stillness:
-            fromStillness
-    };
+        color:
+            bodyColor
+    });
 
 
-    world.presences.push(
-        presence
-    );
-}
+    // head
+
+    drawCube({
+
+        x,
+
+        y: 2.18,
+
+        z,
+
+        sx: 0.34,
+
+        sy: 0.42,
+
+        sz: 0.34,
+
+        color:
+            bodyColor
+    });
 
 
-function maybeSpawnBehind(
-    segmentIndex
-) {
+    // legs
 
-    if (
-        world.presences.length >= 3
-    ) {
-        return;
-    }
-
-
-    const presence = {
+    drawCube({
 
         x:
-            player.x +
-            (
-                Math.random() >
-                0.5
-                    ? 1.1
-                    : -1.1
-            ),
+            x - 0.13,
 
-        z:
-            player.z +
-            8 +
-            Math.random() * 5,
+        y:
+            0.35,
 
-        height:
-            1.8,
+        z,
 
-        scale:
-            0.9,
+        sx:
+            0.14,
 
-        active:
-            true,
+        sy:
+            0.7,
 
-        seen:
-            false,
+        sz:
+            0.16,
 
-        born:
-            performance.now(),
-
-        phase:
-            Math.random() *
-            100,
-
-        behind:
-            true
-    };
+        color:
+            bodyColor
+    });
 
 
-    world.presences.push(
-        presence
-    );
+    drawCube({
 
+        x:
+            x + 0.13,
 
-    /*
-        No jumpscare.
+        y:
+            0.35,
 
-        Just one very quiet sound.
-    */
+        z,
 
-    tone(
-        31,
-        1.4,
-        0.065
-    );
+        sx:
+            0.14,
+
+        sy:
+            0.7,
+
+        sz:
+            0.16,
+
+        color:
+            bodyColor
+    });
 }
 
 
 function updatePresences(
-    delta
+    dt
 ) {
 
     for (
-        const presence
-        of world.presences
+        let i =
+            world.presences.length - 1;
+
+        i >= 0;
+
+        i--
     ) {
 
+        const p =
+            world.presences[i];
+
+        p.age += dt;
+
+
+        // A presence can remain still for a long time.
+
         if (
-            !presence.active
+            p.mode === "approach" &&
+            world.intensity > .72
         ) {
-            continue;
+
+            const dx =
+                player.x - p.x;
+
+            const dz =
+                player.z - p.z;
+
+            const distance =
+                Math.hypot(
+                    dx,
+                    dz
+                );
+
+            if (
+                distance > 2.5
+            ) {
+
+                p.x +=
+                    (dx / distance) *
+                    p.speed *
+                    dt;
+
+                p.z +=
+                    (dz / distance) *
+                    p.speed *
+                    dt;
+            }
         }
 
-
-        /*
-            Very slow movement.
-
-            Almost imperceptible.
-        */
 
         const distance =
-            Math.abs(
-                presence.z -
-                player.z
+            Math.hypot(
+                player.x - p.x,
+                player.z - p.z
             );
 
+        p.visibleTime +=
+            dt;
+
+
+        // Sometimes a presence is simply gone
+        // when the player gets close.
 
         if (
-            distance < 18
-        ) {
-
-            /*
-                If player actually approaches,
-                sometimes it disappears.
-
-                Sometimes it remains.
-
-                No deterministic answer.
-            */
-
-            if (
-                Math.random() <
-                delta *
-                (
-                    0.06 +
-                    world.intensity *
-                    0.04
-                )
-            ) {
-
-                presence.active =
-                    false;
-            }
-        }
-
-
-        /*
-            Detect if player is looking directly at it.
-        */
-
-        if (
-            objectInView(
-                presence.x,
-                presence.z,
-                0.16
-            )
-        ) {
-
-            presence.seen =
-                true;
-        }
-
-
-        /*
-            A presence that has been seen can mutate.
-
-            It does not necessarily move toward the player.
-        */
-
-        if (
-            presence.seen &&
-            world.intensity >
-            0.55
+            distance < 2.2 &&
+            p.age > 3
         ) {
 
             if (
                 Math.random() <
-                delta * 0.018
+                0.012
             ) {
 
-                presence.z +=
-                    (
-                        player.z >
-                        presence.z
-                            ? 1
-                            : -1
-                    ) *
-                    0.4;
-            }
-        }
-    }
-
-
-    /*
-        Remove dead presences.
-    */
-
-    world.presences =
-        world.presences.filter(
-            presence =>
-                presence.active
-        );
-}
-
-
-/* ============================================================
-   DRAW CORRIDOR
-   ============================================================ */
-
-function drawCorridor() {
-
-    const current =
-        Math.floor(
-            Math.abs(player.z) /
-            SEGMENT_LENGTH
-        );
-
-
-    const start =
-        Math.max(
-            0,
-            current - 5
-        );
-
-
-    const end =
-        current + 18;
-
-
-    for (
-        let i = start;
-        i < end;
-        i++
-    ) {
-
-        const segment =
-            getSegment(i);
-
-
-        /*
-            Small geometric inconsistency after mutation.
-        */
-
-        const offset =
-            segment.mutation >
-            0.82 &&
-            world.intensity >
-            0.6
-                ? Math.sin(i * 4.17) * 0.12
-                : 0;
-
-
-        const z =
-            -(
-                i *
-                SEGMENT_LENGTH
-            ) -
-            3.5;
-
-
-        /*
-            FLOOR
-        */
-
-        drawCube(
-            offset,
-            0,
-            z,
-            CORRIDOR_WIDTH,
-            0.12,
-            SEGMENT_LENGTH,
-            [
-                0.045,
-                0.044,
-                0.041
-            ],
-            1
-        );
-
-
-        /*
-            CEILING
-        */
-
-        drawCube(
-            offset,
-            WALL_HEIGHT,
-            z,
-            CORRIDOR_WIDTH,
-            0.12,
-            SEGMENT_LENGTH,
-            [
-                0.022,
-                0.022,
-                0.021
-            ],
-            1
-        );
-
-
-        /*
-            LEFT WALL
-        */
-
-        drawCube(
-            offset - 2.5,
-            2,
-            z,
-            0.12,
-            4,
-            SEGMENT_LENGTH,
-            [
-                0.032,
-                0.032,
-                0.03
-            ],
-            1
-        );
-
-
-        /*
-            RIGHT WALL
-        */
-
-        drawCube(
-            offset + 2.5,
-            2,
-            z,
-            0.12,
-            4,
-            SEGMENT_LENGTH,
-            [
-                0.032,
-                0.032,
-                0.03
-            ],
-            1
-        );
-
-
-        /*
-            WALL PANELS
-        */
-
-        drawWallPanel(
-            offset - 2.42,
-            1.95,
-            z,
-            segment.wallTypeLeft,
-            true,
-            i
-        );
-
-
-        drawWallPanel(
-            offset + 2.42,
-            1.95,
-            z,
-            segment.wallTypeRight,
-            false,
-            i
-        );
-
-
-        /*
-            CEILING LIGHT.
-
-            Individual lights can fail according to
-            world state.
-        */
-
-        const lightRandom =
-            seededRandom(
-                i * 18.2 +
-                world.seed
-            );
-
-
-        const failed =
-            world.intensity >
-            0.32 &&
-            (
-                lightRandom <
-                world.intensity *
-                0.25
-            );
-
-
-        let brightness =
-            failed
-                ? 0.015
-                : 0.12;
-
-
-        /*
-            Occasional flicker later.
-        */
-
-        if (
-            world.intensity >
-            0.55 &&
-            lightRandom <
-            0.08
-        ) {
-
-            brightness *=
-                (
-                    0.3 +
-                    Math.random() *
-                    0.7
+                world.presences.splice(
+                    i,
+                    1
                 );
+
+                playTone(
+                    28,
+                    1.2,
+                    .018
+                );
+            }
         }
 
 
-        drawCube(
-            offset,
-            3.88,
-            z,
-            0.72,
-            0.05,
-            2.0,
-            [
-                0.8,
-                0.8,
-                0.74
-            ],
-            brightness
-        );
+        // Very old presences disappear eventually,
+        // preventing unlimited accumulation.
+
+        if (
+            p.age > 90
+        ) {
+
+            world.presences.splice(
+                i,
+                1
+            );
+        }
     }
 }
 
 
-/* ============================================================
-   WALL PANEL
-   ============================================================ */
+// ============================================================
+// RENDER
+// ============================================================
 
-function drawWallPanel(
-    x,
-    y,
-    z,
-    type,
-    left,
-    index
-) {
+function resize() {
 
-    let texture =
-        textures.normal;
+    const dpr =
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
 
+    canvas.width =
+        Math.floor(
+            window.innerWidth *
+            dpr
+        );
 
-    if (
-        type === "writing"
-    ) {
+    canvas.height =
+        Math.floor(
+            window.innerHeight *
+            dpr
+        );
 
-        texture =
-            textures.writing;
-    }
-
-
-    if (
-        type === "face"
-    ) {
-
-        texture =
-            textures.face;
-    }
-
-
-    if (
-        type === "organic"
-    ) {
-
-        texture =
-            textures.organic;
-    }
-
-
-    if (
-        type === "corrupt"
-    ) {
-
-        texture =
-            textures.corrupt;
-    }
-
-
-    let brightness =
-        type === "normal"
-            ? 0.55
-            : 0.48;
-
-
-    /*
-        Organic material becomes darker,
-        not brighter.
-    */
-
-    if (
-        type === "organic"
-    ) {
-
-        brightness =
-            0.42;
-    }
-
-
-    drawCube(
-        x,
-        y,
-        z,
-        0.035,
-        2.0,
-        3.9,
-        [
-            0.82,
-            0.82,
-            0.78
-        ],
-        brightness,
+    gl.viewport(
         0,
-        texture
+        0,
+        canvas.width,
+        canvas.height
     );
 }
 
 
-/* ============================================================
-   DRAW PRESENCES
-   ============================================================ */
+window.addEventListener(
+    "resize",
+    resize
+);
 
-function drawPresences() {
+resize();
 
-    for (
-        const presence
-        of world.presences
-    ) {
-
-        if (
-            !presence.active
-        ) {
-            continue;
-        }
-
-
-        const distance =
-            Math.abs(
-                presence.z -
-                player.z
-            );
-
-
-        /*
-            Very distant presences are barely visible.
-        */
-
-        if (
-            distance >
-            80
-        ) {
-            continue;
-        }
-
-
-        const visibility =
-            Math.max(
-                0.015,
-                Math.min(
-                    0.15,
-                    0.02 +
-                    (
-                        1 -
-                        distance / 80
-                    ) *
-                    0.13
-                )
-            );
-
-
-        const height =
-            presence.height;
-
-
-        /*
-            Body.
-        */
-
-        drawCube(
-            presence.x,
-            height * 0.58,
-            presence.z,
-            0.35 *
-                presence.scale,
-            height,
-            0.25 *
-                presence.scale,
-            [
-                0.005,
-                0.005,
-                0.005
-            ],
-            visibility
-        );
-
-
-        /*
-            Head.
-        */
-
-        drawCube(
-            presence.x,
-            height + 0.25,
-            presence.z,
-            0.34 *
-                presence.scale,
-            0.36 *
-                presence.scale,
-            0.34 *
-                presence.scale,
-            [
-                0.003,
-                0.003,
-                0.003
-            ],
-            visibility
-        );
-
-
-        /*
-            Long arms.
-        */
-
-        drawCube(
-            presence.x - 0.35,
-            height * 0.55,
-            presence.z,
-            0.10,
-            height * 0.95,
-            0.10,
-            [
-                0.004,
-                0.004,
-                0.004
-            ],
-            visibility
-        );
-
-
-        drawCube(
-            presence.x + 0.35,
-            height * 0.55,
-            presence.z,
-            0.10,
-            height * 0.95,
-            0.10,
-            [
-                0.004,
-                0.004,
-                0.004
-            ],
-            visibility
-        );
-    }
-}
-
-
-/* ============================================================
-   CAMERA
-   ============================================================ */
-
-function buildView() {
-
-    /*
-        Fixed standing height.
-
-        No flying.
-        No roll.
-        No free vertical movement.
-    */
-
-    const walkingBob =
-        player.moving
-            ? Math.sin(
-                player.bob
-            ) * 0.025
-            : 0;
-
-
-    let view =
-        rotationX(
-            player.pitch
-        );
-
-
-    view =
-        multiply(
-            view,
-            rotationY(
-                player.yaw
-            )
-        );
-
-
-    view =
-        multiply(
-            view,
-            translation(
-                -player.x,
-                -(
-                    player.y +
-                    walkingBob
-                ),
-                -player.z
-            )
-        );
-
-
-    return view;
-}
-
-
-/* ============================================================
-   PLAYER MOVEMENT
-   ============================================================ */
-
-let lastStep =
-    0;
-
-
-function updatePlayer(
-    delta
-) {
-
-    if (!started) {
-        return;
-    }
-
-
-    let forward = 0;
-    let strafe = 0;
-
-
-    if (
-        keys["KeyW"]
-    ) {
-        forward += 1;
-    }
-
-
-    if (
-        keys["KeyS"]
-    ) {
-        forward -= 1;
-    }
-
-
-    if (
-        keys["KeyA"]
-    ) {
-        strafe -= 1;
-    }
-
-
-    if (
-        keys["KeyD"]
-    ) {
-        strafe += 1;
-    }
-
-
-    const magnitude =
-        Math.hypot(
-            forward,
-            strafe
-        );
-
-
-    player.moving =
-        magnitude > 0;
-
-
-    if (
-        magnitude > 0
-    ) {
-
-        forward /=
-            magnitude;
-
-        strafe /=
-            magnitude;
-
-
-        /*
-            FPS movement.
-
-            Y is NEVER changed.
-
-            The camera rotates around the
-            player's standing position.
-        */
-
-        const speed =
-            player.walkSpeed *
-            delta;
-
-
-        const forwardX =
-            Math.sin(
-                player.yaw
-            );
-
-
-        const forwardZ =
-            -Math.cos(
-                player.yaw
-            );
-
-
-        const rightX =
-            Math.cos(
-                player.yaw
-            );
-
-
-        const rightZ =
-            Math.sin(
-                player.yaw
-            );
-
-
-        player.x +=
-            (
-                forwardX *
-                forward +
-                rightX *
-                strafe
-            ) *
-            speed;
-
-
-        player.z +=
-            (
-                forwardZ *
-                forward +
-                rightZ *
-                strafe
-            ) *
-            speed;
-
-
-        /*
-            Corridor collision.
-
-            The player stays on the floor.
-        */
-
-        player.x =
-            Math.max(
-                -2.05,
-                Math.min(
-                    2.05,
-                    player.x
-                )
-            );
-
-
-        player.bob +=
-            delta * 9;
-
-
-        if (
-            performance.now() -
-            lastStep >
-            470
-        ) {
-
-            footstep(
-                player.x / 2.2
-            );
-
-            lastStep =
-                performance.now();
-        }
-    }
-
-
-    /*
-        Smooth head rotation.
-    */
-
-    player.yaw +=
-        (
-            player.targetYaw -
-            player.yaw
-        ) *
-        Math.min(
-            1,
-            delta * 14
-        );
-
-
-    player.pitch +=
-        (
-            player.targetPitch -
-            player.pitch
-        ) *
-        Math.min(
-            1,
-            delta * 14
-        );
-}
-
-
-/* ============================================================
-   RENDER
-   ============================================================ */
 
 function render() {
 
-    resize();
-
-
     gl.clearColor(
-        0.001,
-        0.001,
-        0.001,
+        0.005,
+        0.005,
+        0.004,
         1
     );
-
 
     gl.clear(
         gl.COLOR_BUFFER_BIT |
         gl.DEPTH_BUFFER_BIT
     );
 
-
     gl.enable(
         gl.DEPTH_TEST
     );
 
 
+    // --------------------------------------------------------
+    // Projection
+    // --------------------------------------------------------
+
     const aspect =
         canvas.width /
         canvas.height;
 
-
     const projection =
         perspective(
-            Math.PI / 2.5,
+
+            70 *
+            Math.PI /
+            180,
+
             aspect,
+
             0.05,
+
             180
         );
 
-
-    const view =
-        buildView();
-
-
     gl.uniformMatrix4fv(
-        projectionLocation,
+        locations.projection,
         false,
         projection
     );
 
 
+    // --------------------------------------------------------
+    // Camera
+    // --------------------------------------------------------
+
+    const lookDistance =
+        1;
+
+    const direction = {
+
+        x:
+            -Math.sin(
+                player.yaw
+            ) *
+            Math.cos(
+                player.pitch
+            ),
+
+        y:
+            Math.sin(
+                player.pitch
+            ),
+
+        z:
+            -Math.cos(
+                player.yaw
+            ) *
+            Math.cos(
+                player.pitch
+            )
+    };
+
+
+    const target = [
+
+        player.x +
+        direction.x *
+        lookDistance,
+
+        player.y +
+        direction.y *
+        lookDistance,
+
+        player.z +
+        direction.z *
+        lookDistance
+    ];
+
+
+    const view =
+        lookAt(
+
+            [
+                player.x,
+                player.y,
+                player.z
+            ],
+
+            target,
+
+            [
+                0,
+                1,
+                0
+            ]
+        );
+
+
     gl.uniformMatrix4fv(
-        viewLocation,
+        locations.view,
         false,
         view
     );
 
 
-    drawCorridor();
-
-    drawPresences();
-}
-
-
-/* ============================================================
-   RESIZE
-   ============================================================ */
-
-function resize() {
-
-    const ratio =
-        Math.min(
-            window.devicePixelRatio || 1,
-            2
-        );
+    gl.uniform3fv(
+        locations.cameraPosition,
+        [
+            player.x,
+            player.y,
+            player.z
+        ]
+    );
 
 
-    const width =
+    // --------------------------------------------------------
+    // Lighting
+    // --------------------------------------------------------
+
+    const currentSegment =
         Math.floor(
-            canvas.clientWidth *
-            ratio
+            player.z /
+            SEGMENT_LENGTH
         );
 
 
-    const height =
-        Math.floor(
-            canvas.clientHeight *
-            ratio
+    const lightSegment =
+        getSegment(
+            currentSegment
         );
+
+
+    const lightZ =
+        currentSegment *
+        SEGMENT_LENGTH +
+        SEGMENT_LENGTH / 2;
+
+
+    gl.uniform3fv(
+        locations.lightPosition,
+        [
+            0,
+            lightSegment.ceilingHeight -
+            0.15,
+            lightZ
+        ]
+    );
 
 
     if (
-        canvas.width !== width ||
-        canvas.height !== height
+        lightSegment.lightFailure
     ) {
 
-        canvas.width =
-            width;
+        gl.uniform1f(
+            locations.lightIntensity,
+            0.15
+        );
 
-        canvas.height =
-            height;
+    } else {
+
+        gl.uniform1f(
+            locations.lightIntensity,
+            0.95
+        );
+    }
 
 
-        gl.viewport(
-            0,
-            0,
-            width,
-            height
+    gl.uniform1f(
+        locations.lightRadius,
+        9.5
+    );
+
+
+    // This is deliberately non-zero.
+    // It is what keeps the corridor visible
+    // when the fluorescent light is far away.
+
+    gl.uniform1f(
+        locations.ambient,
+        0.22
+    );
+
+
+    gl.uniform1f(
+        locations.fogStart,
+        22
+    );
+
+    gl.uniform1f(
+        locations.fogEnd,
+        55
+    );
+
+
+    // --------------------------------------------------------
+    // Draw nearby corridor.
+    // --------------------------------------------------------
+
+    const center =
+        currentSegment;
+
+
+    for (
+        let i = center - 5;
+        i <= center + 7;
+        i++
+    ) {
+
+        drawSegment(
+            getSegment(i)
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Presences
+    // --------------------------------------------------------
+
+    for (
+        const presence of
+        world.presences
+    ) {
+
+        drawPresence(
+            presence
         );
     }
 }
 
 
-/* ============================================================
-   GAME LOOP
-   ============================================================ */
+// ============================================================
+// MAIN LOOP
+// ============================================================
 
-let previous =
+let lastTime =
     performance.now();
 
 
-function frame(now) {
+function loop(
+    now
+) {
 
-    const delta =
+    const dt =
         Math.min(
-            0.05,
-            (
-                now -
-                previous
-            ) / 1000
+            (now - lastTime) /
+            1000,
+            0.05
         );
 
-
-    previous =
+    lastTime =
         now;
 
-
-    if (started) {
+    if (
+        started
+    ) {
 
         updatePlayer(
-            delta
+            dt
         );
 
-        updateWorld(
-            delta
+        updateWorld();
+
+        updatePresences(
+            dt
         );
+
+        render();
     }
 
-
-    render();
-
-
     requestAnimationFrame(
-        frame
+        loop
     );
 }
 
 
+let started = false;
+
+
+function start() {
+
+    if (started) {
+        return;
+    }
+
+    started = true;
+
+    startAudio();
+
+    intro.classList.add(
+        "hidden"
+    );
+
+    canvas.requestPointerLock();
+
+    lastTime =
+        performance.now();
+}
+
+
+document.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter"
+        ) {
+
+            start();
+        }
+    }
+);
+
+
+intro.addEventListener(
+    "click",
+    start
+);
+
+
 requestAnimationFrame(
-    frame
-);
-
-
-/* ============================================================
-   INITIAL STATE
-   ============================================================ */
-
-gl.enable(
-    gl.DEPTH_TEST
-);
-
-gl.clearColor(
-    0,
-    0,
-    0,
-    1
+    loop
 );
