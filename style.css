@@ -4,82 +4,47 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-
     background: #000;
-
-    font-family:
-        "Courier New",
-        monospace;
 }
 
 body {
+    font-family: "Courier New", monospace;
     cursor: default;
 }
 
 canvas {
     display: block;
-
     width: 100%;
     height: 100%;
-
-    background: #000;
 }
 
-#intro {
+#boot {
     position: fixed;
     inset: 0;
-
-    z-index: 100;
+    z-index: 10;
 
     display: flex;
     flex-direction: column;
-
     align-items: center;
     justify-content: center;
 
     background: #000;
-
     color: #777;
 
-    transition:
-        opacity 2.5s ease;
+    font-size: 14px;
+    letter-spacing: 6px;
+
+    transition: opacity 1.8s ease;
 }
 
-#intro.hidden {
+#boot small {
+    margin-top: 14px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: #444;
+}
+
+#boot.hidden {
     opacity: 0;
     pointer-events: none;
-}
-
-.title {
-    margin-bottom: 28px;
-
-    font-size: 15px;
-
-    letter-spacing: 8px;
-
-    color: #999;
-}
-
-.enter {
-    font-size: 11px;
-
-    letter-spacing: 4px;
-
-    animation:
-        blink 2s infinite;
-}
-
-@keyframes blink {
-
-    0% {
-        opacity: 0.15;
-    }
-
-    50% {
-        opacity: 0.75;
-    }
-
-    100% {
-        opacity: 0.15;
-    }
 }
