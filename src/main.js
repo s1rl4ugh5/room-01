@@ -1,7 +1,9 @@
+// ============================================================
 // ROOM_01
+// ============================================================
 
 const canvas = document.getElementById("canvas");
-const intro = document.getElementById("intro");
+const boot = document.getElementById("boot");
 
 const gl = canvas.getContext("webgl", {
     antialias: true,
@@ -10,7 +12,7 @@ const gl = canvas.getContext("webgl", {
 });
 
 if (!gl) {
-    throw new Error("WebGL is not supported.");
+    throw new Error("WebGL unavailable.");
 }
 
 
@@ -18,7 +20,7 @@ if (!gl) {
 // SHADERS
 // ============================================================
 
-const vertexShaderSource = `
+const vertexSource = `
 attribute vec3 aPosition;
 attribute vec2 aUV;
 
@@ -27,328 +29,370 @@ uniform mat4 uView;
 uniform mat4 uModel;
 
 varying vec2 vUV;
-varying vec3 vWorldPosition;
+varying vec3 vWorld;
 
 void main() {
 
-    vec4 worldPosition =
-        uModel * vec4(aPosition, 1.0);
+    vec4 world =
+        uModel *
+        vec4(aPosition, 1.0);
 
-    vWorldPosition =
-        worldPosition.xyz;
-
+    vWorld = world.xyz;
     vUV = aUV;
 
     gl_Position =
         uProjection *
         uView *
-        worldPosition;
+        world;
 }
 `;
 
-const fragmentShaderSource = `
+const fragmentSource = `
 precision mediump float;
 
 uniform vec3 uColor;
+uniform vec3 uLightPosition;
+uniform vec3 uCamera;
+uniform float uAmbient;
 
 uniform sampler2D uTexture;
 uniform float uUseTexture;
 
-uniform vec3 uLightPosition;
-uniform float uLightIntensity;
-uniform float uLightRadius;
-
-uniform float uAmbient;
-
-uniform vec3 uCameraPosition;
-
-uniform float uFogStart;
-uniform float uFogEnd;
-
 varying vec2 vUV;
-varying vec3 vWorldPosition;
+varying vec3 vWorld;
 
 void main() {
 
-    vec3 base = uColor;
+    vec3 color = uColor;
 
     if (uUseTexture > 0.5) {
-
-        vec4 tex =
-            texture2D(
-                uTexture,
-                vUV
-            );
-
-        base *= tex.rgb;
+        color *= texture2D(
+            uTexture,
+            vUV
+        ).rgb;
     }
-
-    // --------------------------------------------------------
-    // Fake point light.
-    // There are no normals in this intentionally simple
-    // renderer, so distance-based illumination is used.
-    // --------------------------------------------------------
 
     float distanceToLight =
         distance(
-            vWorldPosition,
+            vWorld,
             uLightPosition
         );
 
-    float attenuation =
+    float light =
         1.0 -
         smoothstep(
             0.0,
-            uLightRadius,
+            10.0,
             distanceToLight
         );
 
-    float light =
+    color *=
         uAmbient +
-        attenuation * uLightIntensity;
-
-    base *= light;
-
-    // --------------------------------------------------------
-    // Slight gamma lift.
-    // Prevents the dark procedural textures from becoming
-    // completely black.
-    // --------------------------------------------------------
-
-    base =
-        pow(
-            max(base, vec3(0.0)),
-            vec3(0.78)
-        );
-
-    // --------------------------------------------------------
-    // Distance fog.
-    // The corridor disappears gradually instead of ending
-    // abruptly in black.
-    // --------------------------------------------------------
+        light * 0.75;
 
     float distanceToCamera =
         distance(
-            vWorldPosition,
-            uCameraPosition
+            vWorld,
+            uCamera
         );
 
     float fog =
         smoothstep(
-            uFogStart,
-            uFogEnd,
+            18.0,
+            42.0,
             distanceToCamera
         );
 
-    vec3 fogColor =
-        vec3(
-            0.015,
-            0.014,
-            0.013
-        );
-
-    base =
+    color =
         mix(
-            base,
-            fogColor,
+            color,
+            vec3(
+                0.008,
+                0.008,
+                0.007
+            ),
             fog
         );
 
+    color =
+        pow(
+            max(
+                color,
+                vec3(0.0)
+            ),
+            vec3(0.82)
+        );
+
     gl_FragColor =
-        vec4(base, 1.0);
+        vec4(color, 1.0);
 }
 `;
 
 
-// ============================================================
-// SHADER HELPERS
-// ============================================================
+function shader(type, source) {
 
-function compileShader(type, source) {
-
-    const shader =
+    const s =
         gl.createShader(type);
 
     gl.shaderSource(
-        shader,
+        s,
         source
     );
 
-    gl.compileShader(shader);
+    gl.compileShader(s);
 
     if (!gl.getShaderParameter(
-        shader,
+        s,
         gl.COMPILE_STATUS
     )) {
 
         console.error(
-            gl.getShaderInfoLog(shader)
+            gl.getShaderInfoLog(s)
         );
 
         throw new Error(
-            "Shader compilation failed."
+            "Shader error."
         );
     }
 
-    return shader;
+    return s;
 }
 
 
-function createProgram(
-    vertexSource,
-    fragmentSource
-) {
+function program() {
 
-    const vertexShader =
-        compileShader(
-            gl.VERTEX_SHADER,
-            vertexSource
-        );
-
-    const fragmentShader =
-        compileShader(
-            gl.FRAGMENT_SHADER,
-            fragmentSource
-        );
-
-    const program =
+    const p =
         gl.createProgram();
 
     gl.attachShader(
-        program,
-        vertexShader
+        p,
+        shader(
+            gl.VERTEX_SHADER,
+            vertexSource
+        )
     );
 
     gl.attachShader(
-        program,
-        fragmentShader
+        p,
+        shader(
+            gl.FRAGMENT_SHADER,
+            fragmentSource
+        )
     );
 
-    gl.linkProgram(program);
+    gl.linkProgram(p);
 
     if (!gl.getProgramParameter(
-        program,
+        p,
         gl.LINK_STATUS
     )) {
 
         console.error(
-            gl.getProgramInfoLog(program)
+            gl.getProgramInfoLog(p)
         );
 
         throw new Error(
-            "Program linking failed."
+            "Program link error."
         );
     }
 
-    return program;
+    return p;
 }
 
 
-const program =
-    createProgram(
-        vertexShaderSource,
-        fragmentShaderSource
-    );
+const programObject =
+    program();
 
-gl.useProgram(program);
+gl.useProgram(
+    programObject
+);
 
 
 // ============================================================
 // LOCATIONS
 // ============================================================
 
-const locations = {
+const loc = {
 
     position:
         gl.getAttribLocation(
-            program,
+            programObject,
             "aPosition"
         ),
 
     uv:
         gl.getAttribLocation(
-            program,
+            programObject,
             "aUV"
         ),
 
     projection:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uProjection"
         ),
 
     view:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uView"
         ),
 
     model:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uModel"
         ),
 
     color:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uColor"
+        ),
+
+    light:
+        gl.getUniformLocation(
+            programObject,
+            "uLightPosition"
+        ),
+
+    camera:
+        gl.getUniformLocation(
+            programObject,
+            "uCamera"
+        ),
+
+    ambient:
+        gl.getUniformLocation(
+            programObject,
+            "uAmbient"
         ),
 
     texture:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uTexture"
         ),
 
     useTexture:
         gl.getUniformLocation(
-            program,
+            programObject,
             "uUseTexture"
-        ),
-
-    lightPosition:
-        gl.getUniformLocation(
-            program,
-            "uLightPosition"
-        ),
-
-    lightIntensity:
-        gl.getUniformLocation(
-            program,
-            "uLightIntensity"
-        ),
-
-    lightRadius:
-        gl.getUniformLocation(
-            program,
-            "uLightRadius"
-        ),
-
-    ambient:
-        gl.getUniformLocation(
-            program,
-            "uAmbient"
-        ),
-
-    cameraPosition:
-        gl.getUniformLocation(
-            program,
-            "uCameraPosition"
-        ),
-
-    fogStart:
-        gl.getUniformLocation(
-            program,
-            "uFogStart"
-        ),
-
-    fogEnd:
-        gl.getUniformLocation(
-            program,
-            "uFogEnd"
         )
 };
+
+
+// ============================================================
+// CUBE
+// ============================================================
+
+const vertices = new Float32Array([
+
+    // front
+    -0.5,-0.5, 0.5, 0,0,
+     0.5,-0.5, 0.5, 1,0,
+     0.5, 0.5, 0.5, 1,1,
+    -0.5, 0.5, 0.5, 0,1,
+
+    // back
+     0.5,-0.5,-0.5, 0,0,
+    -0.5,-0.5,-0.5, 1,0,
+    -0.5, 0.5,-0.5, 1,1,
+     0.5, 0.5,-0.5, 0,1,
+
+    // left
+    -0.5,-0.5,-0.5, 0,0,
+    -0.5,-0.5, 0.5, 1,0,
+    -0.5, 0.5, 0.5, 1,1,
+    -0.5, 0.5,-0.5, 0,1,
+
+    // right
+     0.5,-0.5, 0.5, 0,0,
+     0.5,-0.5,-0.5, 1,0,
+     0.5, 0.5,-0.5, 1,1,
+     0.5, 0.5, 0.5, 0,1,
+
+    // top
+    -0.5,0.5, 0.5, 0,0,
+     0.5,0.5, 0.5, 1,0,
+     0.5,0.5,-0.5, 1,1,
+    -0.5,0.5,-0.5, 0,1,
+
+    // bottom
+    -0.5,-0.5,-0.5, 0,0,
+     0.5,-0.5,-0.5, 1,0,
+     0.5,-0.5, 0.5, 1,1,
+    -0.5,-0.5, 0.5, 0,1
+]);
+
+
+const indices = new Uint16Array([
+
+     0,1,2, 0,2,3,
+     4,5,6, 4,6,7,
+     8,9,10, 8,10,11,
+    12,13,14, 12,14,15,
+    16,17,18, 16,18,19,
+    20,21,22, 20,22,23
+]);
+
+
+const vertexBuffer =
+    gl.createBuffer();
+
+gl.bindBuffer(
+    gl.ARRAY_BUFFER,
+    vertexBuffer
+);
+
+gl.bufferData(
+    gl.ARRAY_BUFFER,
+    vertices,
+    gl.STATIC_DRAW
+);
+
+
+const indexBuffer =
+    gl.createBuffer();
+
+gl.bindBuffer(
+    gl.ELEMENT_ARRAY_BUFFER,
+    indexBuffer
+);
+
+gl.bufferData(
+    gl.ELEMENT_ARRAY_BUFFER,
+    indices,
+    gl.STATIC_DRAW
+);
+
+
+gl.enableVertexAttribArray(
+    loc.position
+);
+
+gl.vertexAttribPointer(
+    loc.position,
+    3,
+    gl.FLOAT,
+    false,
+    20,
+    0
+);
+
+
+gl.enableVertexAttribArray(
+    loc.uv
+);
+
+gl.vertexAttribPointer(
+    loc.uv,
+    2,
+    gl.FLOAT,
+    false,
+    20,
+    12
+);
 
 
 // ============================================================
@@ -363,7 +407,7 @@ function perspective(
 ) {
 
     const f =
-        1.0 /
+        1 /
         Math.tan(
             fov / 2
         );
@@ -391,7 +435,7 @@ function perspective(
 
         0,
         0,
-        (2 * far * near) * nf,
+        2 * far * near * nf,
         0
     ]);
 }
@@ -399,21 +443,17 @@ function perspective(
 
 function normalize(v) {
 
-    const length =
+    const n =
         Math.hypot(
             v[0],
             v[1],
             v[2]
         );
 
-    if (length === 0) {
-        return [0, 0, 0];
-    }
-
     return [
-        v[0] / length,
-        v[1] / length,
-        v[2] / length
+        v[0] / n,
+        v[1] / n,
+        v[2] / n
     ];
 }
 
@@ -433,33 +473,33 @@ function lookAt(
 
     const x =
         normalize([
-            up[1] * z[2] - up[2] * z[1],
-            up[2] * z[0] - up[0] * z[2],
-            up[0] * z[1] - up[1] * z[0]
+            up[1] * z[2] -
+            up[2] * z[1],
+
+            up[2] * z[0] -
+            up[0] * z[2],
+
+            up[0] * z[1] -
+            up[1] * z[0]
         ]);
 
     const y = [
-        z[1] * x[2] - z[2] * x[1],
-        z[2] * x[0] - z[0] * x[2],
-        z[0] * x[1] - z[1] * x[0]
+
+        z[1] * x[2] -
+        z[2] * x[1],
+
+        z[2] * x[0] -
+        z[0] * x[2],
+
+        z[0] * x[1] -
+        z[1] * x[0]
     ];
 
     return new Float32Array([
 
-        x[0],
-        y[0],
-        z[0],
-        0,
-
-        x[1],
-        y[1],
-        z[1],
-        0,
-
-        x[2],
-        y[2],
-        z[2],
-        0,
+        x[0], y[0], z[0], 0,
+        x[1], y[1], z[1], 0,
+        x[2], y[2], z[2], 0,
 
         -(
             x[0] * eye[0] +
@@ -484,6 +524,45 @@ function lookAt(
 }
 
 
+function multiply(a, b) {
+
+    const out =
+        new Float32Array(16);
+
+    for (
+        let row = 0;
+        row < 4;
+        row++
+    ) {
+
+        for (
+            let col = 0;
+            col < 4;
+            col++
+        ) {
+
+            out[
+                col * 4 + row
+            ] =
+
+                a[row] *
+                b[col * 4] +
+
+                a[4 + row] *
+                b[col * 4 + 1] +
+
+                a[8 + row] *
+                b[col * 4 + 2] +
+
+                a[12 + row] *
+                b[col * 4 + 3];
+        }
+    }
+
+    return out;
+}
+
+
 function translation(
     x,
     y,
@@ -492,11 +571,11 @@ function translation(
 
     return new Float32Array([
 
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
 
-        x, y, z, 1
+        x,y,z,1
     ]);
 }
 
@@ -509,765 +588,248 @@ function scale(
 
     return new Float32Array([
 
-        x, 0, 0, 0,
-        0, y, 0, 0,
-        0, 0, z, 0,
+        x,0,0,0,
+        0,y,0,0,
+        0,0,z,0,
 
-        0, 0, 0, 1
+        0,0,0,1
     ]);
 }
 
 
-function multiply(
-    a,
-    b
-) {
+// ============================================================
+// PERSISTENT STATE
+// ============================================================
 
-    const out =
-        new Float32Array(16);
+const STORAGE_KEY =
+    "room01_state_v1";
 
-    for (let row = 0; row < 4; row++) {
 
-        for (let col = 0; col < 4; col++) {
+function loadState() {
 
-            out[
-                col * 4 + row
-            ] =
+    try {
 
-                a[0 * 4 + row] *
-                b[col * 4 + 0] +
+        const raw =
+            localStorage.getItem(
+                STORAGE_KEY
+            );
 
-                a[1 * 4 + row] *
-                b[col * 4 + 1] +
+        if (!raw) {
 
-                a[2 * 4 + row] *
-                b[col * 4 + 2] +
+            return {
 
-                a[3 * 4 + row] *
-                b[col * 4 + 3];
+                executions: 0,
+
+                rooms: {},
+
+                objectsSeen: {},
+
+                totalDistance: 0
+            };
         }
-    }
 
-    return out;
+        return JSON.parse(raw);
+
+    } catch {
+
+        return {
+
+            executions: 0,
+
+            rooms: {},
+
+            objectsSeen: {},
+
+            totalDistance: 0
+        };
+    }
 }
 
 
-// ============================================================
-// CUBE
-// ============================================================
-
-const cubeVertices = new Float32Array([
-
-    // FRONT
-    -0.5, -0.5,  0.5,  0, 0,
-     0.5, -0.5,  0.5,  1, 0,
-     0.5,  0.5,  0.5,  1, 1,
-    -0.5,  0.5,  0.5,  0, 1,
-
-    // BACK
-     0.5, -0.5, -0.5,  0, 0,
-    -0.5, -0.5, -0.5,  1, 0,
-    -0.5,  0.5, -0.5,  1, 1,
-     0.5,  0.5, -0.5,  0, 1,
-
-    // LEFT
-    -0.5, -0.5, -0.5,  0, 0,
-    -0.5, -0.5,  0.5,  1, 0,
-    -0.5,  0.5,  0.5,  1, 1,
-    -0.5,  0.5, -0.5,  0, 1,
-
-    // RIGHT
-     0.5, -0.5,  0.5,  0, 0,
-     0.5, -0.5, -0.5,  1, 0,
-     0.5,  0.5, -0.5,  1, 1,
-     0.5,  0.5,  0.5,  0, 1,
-
-    // TOP
-    -0.5,  0.5,  0.5,  0, 0,
-     0.5,  0.5,  0.5,  1, 0,
-     0.5,  0.5, -0.5,  1, 1,
-    -0.5,  0.5, -0.5,  0, 1,
-
-    // BOTTOM
-    -0.5, -0.5, -0.5,  0, 0,
-     0.5, -0.5, -0.5,  1, 0,
-     0.5, -0.5,  0.5,  1, 1,
-    -0.5, -0.5,  0.5,  0, 1
-]);
+const persistent =
+    loadState();
 
 
-const cubeIndices = new Uint16Array([
-
-     0,  1,  2,
-     0,  2,  3,
-
-     4,  5,  6,
-     4,  6,  7,
-
-     8,  9, 10,
-     8, 10, 11,
-
-    12, 13, 14,
-    12, 14, 15,
-
-    16, 17, 18,
-    16, 18, 19,
-
-    20, 21, 22,
-    20, 22, 23
-]);
+persistent.executions++;
 
 
-const vertexBuffer =
-    gl.createBuffer();
+function saveState() {
 
-gl.bindBuffer(
-    gl.ARRAY_BUFFER,
-    vertexBuffer
-);
+    try {
 
-gl.bufferData(
-    gl.ARRAY_BUFFER,
-    cubeVertices,
-    gl.STATIC_DRAW
-);
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(
+                persistent
+            )
+        );
 
-
-const indexBuffer =
-    gl.createBuffer();
-
-gl.bindBuffer(
-    gl.ELEMENT_ARRAY_BUFFER,
-    indexBuffer
-);
-
-gl.bufferData(
-    gl.ELEMENT_ARRAY_BUFFER,
-    cubeIndices,
-    gl.STATIC_DRAW
-);
-
-
-gl.enableVertexAttribArray(
-    locations.position
-);
-
-gl.enableVertexAttribArray(
-    locations.uv
-);
-
-gl.vertexAttribPointer(
-    locations.position,
-    3,
-    gl.FLOAT,
-    false,
-    20,
-    0
-);
-
-gl.vertexAttribPointer(
-    locations.uv,
-    2,
-    gl.FLOAT,
-    false,
-    20,
-    12
-);
-
-
-// ============================================================
-// PROCEDURAL TEXTURES
-// ============================================================
-
-const textures = {};
-
-
-function makeTexture(
-    type
-) {
-
-    const size = 512;
-
-    const canvasTexture =
-        document.createElement("canvas");
-
-    canvasTexture.width = size;
-    canvasTexture.height = size;
-
-    const ctx =
-        canvasTexture.getContext("2d");
-
-    // Base
-    ctx.fillStyle =
-        "#45413d";
-
-    ctx.fillRect(
-        0,
-        0,
-        size,
-        size
-    );
-
-
-    // --------------------------------------------------------
-    // NORMAL
-    // --------------------------------------------------------
-
-    if (type === "normal") {
-
-        for (let i = 0; i < 3000; i++) {
-
-            const x =
-                Math.random() * size;
-
-            const y =
-                Math.random() * size;
-
-            const v =
-                45 +
-                Math.random() * 35;
-
-            ctx.fillStyle =
-                `rgb(${v},${v - 2},${v - 5})`;
-
-            ctx.fillRect(
-                x,
-                y,
-                1 + Math.random() * 3,
-                1 + Math.random() * 3
-            );
-        }
-
-        ctx.strokeStyle =
-            "rgba(10,10,10,.25)";
-
-        for (let y = 0; y < size; y += 64) {
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-                0,
-                y
-            );
-
-            ctx.lineTo(
-                size,
-                y
-            );
-
-            ctx.stroke();
-        }
+    } catch {
+        // Ignore storage errors.
     }
-
-
-    // --------------------------------------------------------
-    // WRITING
-    // --------------------------------------------------------
-
-    if (type === "writing") {
-
-        ctx.fillStyle =
-            "#403a36";
-
-        ctx.fillRect(
-            0,
-            0,
-            size,
-            size
-        );
-
-        ctx.font =
-            "bold 31px Courier New";
-
-        ctx.fillStyle =
-            "rgba(105,38,32,.8)";
-
-        const phrases = [
-
-            "I SAW YOU",
-            "DO NOT LOOK",
-            "NOT THIS WAY",
-            "IT MOVED",
-            "STAY",
-            "BEHIND YOU",
-            "LOOK AGAIN",
-            "I REMEMBER",
-            "NO",
-            "STOP",
-            "YOU WERE HERE",
-            "WHY DID YOU TURN"
-        ];
-
-        for (let i = 0; i < 18; i++) {
-
-            const phrase =
-                phrases[
-                    Math.floor(
-                        Math.random() *
-                        phrases.length
-                    )
-                ];
-
-            ctx.save();
-
-            ctx.translate(
-                Math.random() * size,
-                Math.random() * size
-            );
-
-            ctx.rotate(
-                (Math.random() - 0.5) *
-                0.35
-            );
-
-            ctx.fillText(
-                phrase,
-                0,
-                0
-            );
-
-            ctx.restore();
-        }
-
-        for (let i = 0; i < 1200; i++) {
-
-            ctx.fillStyle =
-                "rgba(15,10,10,.25)";
-
-            ctx.fillRect(
-                Math.random() * size,
-                Math.random() * size,
-                Math.random() * 4,
-                Math.random() * 4
-            );
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // FACE
-    // --------------------------------------------------------
-
-    if (type === "face") {
-
-        ctx.fillStyle =
-            "#373331";
-
-        ctx.fillRect(
-            0,
-            0,
-            size,
-            size
-        );
-
-        const cx = 256;
-        const cy = 260;
-
-        ctx.fillStyle =
-            "rgba(12,10,10,.9)";
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            cx,
-            cy,
-            135,
-            175,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        // eyes
-
-        ctx.fillStyle =
-            "#070707";
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            cx - 55,
-            cy - 35,
-            26,
-            12,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.ellipse(
-            cx + 55,
-            cy - 35,
-            26,
-            12,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        // mouth
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            cx,
-            cy + 65,
-            58,
-            22,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        // vertical corruption
-
-        for (let i = 0; i < 90; i++) {
-
-            ctx.fillStyle =
-                `rgba(0,0,0,${
-                    Math.random() * .35
-                })`;
-
-            ctx.fillRect(
-                Math.random() * size,
-                0,
-                1 + Math.random() * 8,
-                size
-            );
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // ORGANIC
-    // --------------------------------------------------------
-
-    if (type === "organic") {
-
-        ctx.fillStyle =
-            "#382f2d";
-
-        ctx.fillRect(
-            0,
-            0,
-            size,
-            size
-        );
-
-        ctx.strokeStyle =
-            "rgba(96,28,26,.85)";
-
-        ctx.lineWidth = 5;
-
-        for (let i = 0; i < 25; i++) {
-
-            ctx.beginPath();
-
-            let x =
-                Math.random() * size;
-
-            let y = 0;
-
-            ctx.moveTo(
-                x,
-                y
-            );
-
-            for (
-                let j = 0;
-                j < 8;
-                j++
-            ) {
-
-                x +=
-                    (Math.random() - .5) *
-                    100;
-
-                y +=
-                    40 +
-                    Math.random() * 80;
-
-                ctx.lineTo(
-                    x,
-                    y
-                );
-            }
-
-            ctx.stroke();
-        }
-
-        for (let i = 0; i < 500; i++) {
-
-            ctx.fillStyle =
-                "rgba(80,20,18,.35)";
-
-            ctx.beginPath();
-
-            ctx.arc(
-                Math.random() * size,
-                Math.random() * size,
-                Math.random() * 8,
-                0,
-                Math.PI * 2
-            );
-
-            ctx.fill();
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // CORRUPT
-    // --------------------------------------------------------
-
-    if (type === "corrupt") {
-
-        ctx.fillStyle =
-            "#282523";
-
-        ctx.fillRect(
-            0,
-            0,
-            size,
-            size
-        );
-
-        for (let i = 0; i < 100; i++) {
-
-            ctx.fillStyle =
-                Math.random() > .75
-                    ? "rgba(100,20,20,.8)"
-                    : "rgba(0,0,0,.7)";
-
-            ctx.fillRect(
-
-                Math.random() * size,
-
-                Math.random() * size,
-
-                20 +
-                Math.random() * 180,
-
-                3 +
-                Math.random() * 30
-            );
-        }
-    }
-
-
-    const texture =
-        gl.createTexture();
-
-    gl.bindTexture(
-        gl.TEXTURE_2D,
-        texture
-    );
-
-    gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        canvasTexture
-    );
-
-    gl.texParameteri(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_MIN_FILTER,
-        gl.LINEAR_MIPMAP_LINEAR
-    );
-
-    gl.texParameteri(
-        gl.TEXTURE_2D,
-        gl.TEXTURE_MAG_FILTER,
-        gl.LINEAR
-    );
-
-    gl.generateMipmap(
-        gl.TEXTURE_2D
-    );
-
-    return texture;
 }
 
 
-textures.normal =
-    makeTexture("normal");
-
-textures.writing =
-    makeTexture("writing");
-
-textures.face =
-    makeTexture("face");
-
-textures.organic =
-    makeTexture("organic");
-
-textures.corrupt =
-    makeTexture("corrupt");
+saveState();
 
 
 // ============================================================
 // WORLD
 // ============================================================
 
-const SEGMENT_LENGTH = 7;
-const CORRIDOR_WIDTH = 5;
-const WALL_HEIGHT = 4;
+const ROOM_LENGTH = 12;
+const ROOM_WIDTH = 6;
+const ROOM_HEIGHT = 4;
 
 const world = {
 
-    seed:
-        Math.random() * 100000,
+    room: 0,
 
-    intensity: 0,
+    visitedRooms: new Set(),
 
-    visited:
-        new Map(),
+    lookedAt: null,
 
-    generated:
-        new Map(),
+    returnCount: 0,
 
-    presences: [],
-
-    totalDistance: 0,
-
-    stoppedTime: 0,
-
-    lookingBack: 0,
-
-    backwardsTravel: 0,
-
-    lastSegment: null,
-
-    lastZ: 0,
-
-    lastYaw: 0,
-
-    mutationCounter: 0
+    strangeLevel: 0
 };
 
 
-function seededRandom(
-    seed
-) {
+function roomState(id) {
 
-    const x =
-        Math.sin(seed * 12.9898) *
-        43758.5453;
+    const key =
+        String(id);
 
-    return (
-        x -
-        Math.floor(x)
-    );
+    if (
+        !persistent.rooms[key]
+    ) {
+
+        persistent.rooms[key] = {
+
+            visits: 0,
+
+            changed: false,
+
+            chairMoved: false,
+
+            secondChair: false,
+
+            doorMoved: false,
+
+            lightChanged: false,
+
+            impossible: false
+        };
+    }
+
+    return persistent.rooms[key];
 }
 
 
-function getSegment(
-    index
-) {
+// ============================================================
+// ROOMS
+// ============================================================
 
-    if (
-        world.generated.has(index)
-    ) {
+function roomCenter(id) {
 
-        return world.generated.get(
-            index
+    return id * ROOM_LENGTH;
+}
+
+
+function updateRoom() {
+
+    const newRoom =
+        Math.floor(
+            player.z /
+            ROOM_LENGTH
         );
-    }
-
-    const r =
-        seededRandom(
-            world.seed +
-            index * 137.17
-        );
-
-    let texture =
-        "normal";
-
-    let chance =
-        r;
 
     if (
-        world.intensity > .25 &&
-        chance < .16
+        newRoom === world.room
     ) {
-
-        texture =
-            "writing";
+        return;
     }
 
-    if (
-        world.intensity > .45 &&
-        chance < .08
-    ) {
+    world.room =
+        newRoom;
 
-        texture =
-            "face";
-    }
+    const state =
+        roomState(newRoom);
 
-    if (
-        world.intensity > .60 &&
-        chance < .055
-    ) {
+    state.visits++;
 
-        texture =
-            "organic";
-    }
-
-    if (
-        world.intensity > .80 &&
-        chance < .035
-    ) {
-
-        texture =
-            "corrupt";
-    }
-
-
-    const segment = {
-
-        index,
-
-        texture,
-
-        mutated: false,
-
-        visited: 0,
-
-        lightFailure:
-            seededRandom(
-                world.seed +
-                index * 31.7
-            ) < .08,
-
-        lightOffset:
-            seededRandom(
-                world.seed +
-                index * 91.1
-            ),
-
-        ceilingHeight:
-            3.7 +
-            seededRandom(
-                world.seed +
-                index * 5.3
-            ) * .4
-    };
-
-    world.generated.set(
-        index,
-        segment
+    world.visitedRooms.add(
+        newRoom
     );
 
-    return segment;
+    persistent.totalDistance =
+        Math.max(
+            persistent.totalDistance,
+            Math.abs(player.z)
+        );
+
+
+    // --------------------------------------------------------
+    // The room remembers being visited.
+    // --------------------------------------------------------
+
+    if (
+        state.visits >= 2
+    ) {
+
+        state.changed = true;
+    }
+
+
+    // --------------------------------------------------------
+    // More visits create contradictions.
+    // These are not scheduled events.
+    // They are consequences of returning.
+    // --------------------------------------------------------
+
+    if (
+        state.visits >= 2 &&
+        Math.random() < 0.55
+    ) {
+
+        state.chairMoved = true;
+    }
+
+
+    if (
+        state.visits >= 3 &&
+        Math.random() < 0.40
+    ) {
+
+        state.secondChair = true;
+    }
+
+
+    if (
+        state.visits >= 3 &&
+        Math.random() < 0.30
+    ) {
+
+        state.doorMoved = true;
+    }
+
+
+    if (
+        state.visits >= 4
+    ) {
+
+        state.lightChanged = true;
+    }
+
+
+    if (
+        state.visits >= 5
+    ) {
+
+        state.impossible = true;
+    }
+
+    saveState();
 }
 
 
@@ -1279,17 +841,15 @@ const player = {
 
     x: 0,
 
-    y: 1.68,
+    y: 1.7,
 
-    z: 0,
+    z: -2,
 
     yaw: Math.PI,
 
     pitch: 0,
 
-    speed: 2.65,
-
-    radius: .42
+    speed: 3.0
 };
 
 
@@ -1326,19 +886,14 @@ window.addEventListener(
 
 
 // ============================================================
-// MOUSE LOOK
+// MOUSE
 // ============================================================
 
 canvas.addEventListener(
     "click",
     () => {
 
-        if (
-            document.pointerLockElement !== canvas
-        ) {
-
-            canvas.requestPointerLock();
-        }
+        canvas.requestPointerLock();
     }
 );
 
@@ -1361,14 +916,11 @@ document.addEventListener(
             event.movementY *
             0.0022;
 
-        // Do not allow the camera to become
-        // an aircraft/free-flight camera.
-
         player.pitch =
             Math.max(
-                -0.82,
+                -0.75,
                 Math.min(
-                    0.82,
+                    0.75,
                     player.pitch
                 )
             );
@@ -1377,593 +929,146 @@ document.addEventListener(
 
 
 // ============================================================
+// OBJECT INTERACTION
+// ============================================================
+
+const objects = [];
+
+function createObject(
+    type,
+    x,
+    y,
+    z,
+    room
+) {
+
+    objects.push({
+
+        type,
+
+        x,
+
+        y,
+
+        z,
+
+        room,
+
+        seen: false
+    });
+}
+
+
+// ============================================================
 // AUDIO
 // ============================================================
 
-let audioContext = null;
-let drone = null;
-let droneGain = null;
+let audio = null;
 
 
-function startAudio() {
+function initAudio() {
 
-    if (audioContext) {
+    if (audio) {
         return;
     }
 
-    audioContext =
+    audio =
         new (
             window.AudioContext ||
             window.webkitAudioContext
         )();
 
-    drone =
-        audioContext.createOscillator();
-
-    droneGain =
-        audioContext.createGain();
-
-    drone.type =
-        "sine";
-
-    drone.frequency.value =
-        43;
-
-    droneGain.gain.value =
-        0.018;
-
-    drone.connect(
-        droneGain
-    );
-
-    droneGain.connect(
-        audioContext.destination
-    );
-
-    drone.start();
-}
-
-
-function playTone(
-    frequency,
-    duration,
-    volume
-) {
-
-    if (!audioContext) {
-        return;
-    }
-
     const oscillator =
-        audioContext.createOscillator();
+        audio.createOscillator();
 
     const gain =
-        audioContext.createGain();
+        audio.createGain();
 
     oscillator.type =
         "sine";
 
     oscillator.frequency.value =
-        frequency;
+        43;
 
     gain.gain.value =
-        volume;
+        0.012;
 
-    oscillator.connect(
-        gain
-    );
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
 
-    gain.connect(
-        audioContext.destination
-    );
+    oscillator.start();
+}
+
+
+function strangeSound() {
+
+    if (!audio) {
+        return;
+    }
+
+    const oscillator =
+        audio.createOscillator();
+
+    const gain =
+        audio.createGain();
+
+    oscillator.type =
+        "triangle";
+
+    oscillator.frequency.value =
+        31 +
+        Math.random() * 17;
+
+    gain.gain.value =
+        0.025;
+
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
 
     const now =
-        audioContext.currentTime;
+        audio.currentTime;
 
     gain.gain.setValueAtTime(
-        volume,
+        0.025,
         now
     );
 
     gain.gain.exponentialRampToValueAtTime(
         0.001,
-        now + duration
+        now + 1.8
     );
 
     oscillator.start(now);
 
     oscillator.stop(
-        now + duration
+        now + 1.8
     );
 }
 
 
 // ============================================================
-// PRESENCES
+// DRAW
 // ============================================================
 
-function spawnPresence(
-    x,
-    z,
-    mode = "far"
-) {
-
-    if (
-        world.presences.length >= 5
-    ) {
-        return;
-    }
-
-    world.presences.push({
-
-        x,
-
-        y: 0,
-
-        z,
-
-        mode,
-
-        age: 0,
-
-        visibleTime: 0,
-
-        speed:
-            mode === "approach"
-                ? 0.12
-                : 0
-    });
-}
-
-
-function maybeSpawnPresence(
-    segment
-) {
-
-    const intensity =
-        world.intensity;
-
-    if (
-        intensity < .25
-    ) {
-        return;
-    }
-
-    const distance =
-        Math.abs(
-            segment.index *
-            SEGMENT_LENGTH -
-            player.z
-        );
-
-    if (
-        distance < 10
-    ) {
-        return;
-    }
-
-    let probability =
-        0.002 +
-        intensity *
-        0.004;
-
-    if (
-        world.stoppedTime > 8
-    ) {
-
-        probability +=
-            0.018;
-    }
-
-    if (
-        world.lookingBack > 1.3
-    ) {
-
-        probability +=
-            0.025;
-    }
-
-    if (
-        Math.random() <
-        probability
-    ) {
-
-        const direction =
-            player.z >
-            segment.index *
-            SEGMENT_LENGTH
-                ? 1
-                : -1;
-
-        spawnPresence(
-
-            player.x,
-
-            segment.index *
-                SEGMENT_LENGTH +
-                direction *
-                4,
-
-            intensity > .7
-                ? "approach"
-                : "far"
-        );
-
-        playTone(
-            61 +
-            Math.random() * 20,
-            1.4,
-            .025
-        );
-    }
-}
-
-
-function maybeSpawnBehind() {
-
-    if (
-        world.intensity < .35
-    ) {
-        return;
-    }
-
-    if (
-        world.presences.length >= 5
-    ) {
-        return;
-    }
-
-    if (
-        Math.random() >
-        0.025 +
-        world.intensity * 0.035
-    ) {
-        return;
-    }
-
-    const forward = {
-
-        x:
-            -Math.sin(player.yaw),
-
-        z:
-            -Math.cos(player.yaw)
-    };
-
-    spawnPresence(
-
-        player.x -
-        forward.x * 8,
-
-        player.z -
-        forward.z * 8,
-
-        "far"
-    );
-
-    playTone(
-        49,
-        1.8,
-        .018
-    );
-}
-
-
-// ============================================================
-// MOVEMENT
-// ============================================================
-
-function updatePlayer(
-    dt
-) {
-
-    let forward = 0;
-    let strafe = 0;
-
-    if (keys["w"]) {
-        forward += 1;
-    }
-
-    if (keys["s"]) {
-        forward -= 1;
-    }
-
-    if (keys["a"]) {
-        strafe -= 1;
-    }
-
-    if (keys["d"]) {
-        strafe += 1;
-    }
-
-    const moving =
-        forward !== 0 ||
-        strafe !== 0;
-
-    if (moving) {
-
-        const length =
-            Math.hypot(
-                forward,
-                strafe
-            );
-
-        forward /= length;
-        strafe /= length;
-
-        const forwardX =
-            -Math.sin(player.yaw);
-
-        const forwardZ =
-            -Math.cos(player.yaw);
-
-        const rightX =
-            Math.cos(player.yaw);
-
-        const rightZ =
-            -Math.sin(player.yaw);
-
-        const movementX =
-            (
-                forwardX *
-                forward +
-
-                rightX *
-                strafe
-            ) *
-            player.speed *
-            dt;
-
-        const movementZ =
-            (
-                forwardZ *
-                forward +
-
-                rightZ *
-                strafe
-            ) *
-            player.speed *
-            dt;
-
-        player.x += movementX;
-
-        player.z += movementZ;
-
-        // Corridor walls.
-        player.x =
-            Math.max(
-                -CORRIDOR_WIDTH / 2 +
-                player.radius,
-
-                Math.min(
-                    CORRIDOR_WIDTH / 2 -
-                    player.radius,
-
-                    player.x
-                )
-            );
-
-        world.totalDistance +=
-            Math.hypot(
-                movementX,
-                movementZ
-            );
-
-        world.stoppedTime = 0;
-
-    } else {
-
-        world.stoppedTime +=
-            dt;
-    }
-
-
-    // --------------------------------------------------------
-    // Looking backwards
-    // --------------------------------------------------------
-
-    let yawDelta =
-        Math.abs(
-            player.yaw -
-            world.lastYaw
-        );
-
-    if (yawDelta > Math.PI) {
-        yawDelta =
-            Math.PI * 2 -
-            yawDelta;
-    }
-
-    if (
-        Math.abs(
-            player.yaw -
-            world.lastYaw
-        ) > 0.7
-    ) {
-
-        world.lookingBack +=
-            dt;
-    } else {
-
-        world.lookingBack *=
-            0.94;
-    }
-
-    world.lastYaw =
-        player.yaw;
-
-
-    // --------------------------------------------------------
-    // World intensity is based on exploration.
-    // No clock-based progression.
-    // --------------------------------------------------------
-
-    world.intensity =
-        Math.min(
-            1,
-            world.totalDistance /
-            170
-        );
-
-
-    if (
-        player.z <
-        world.lastZ - 0.01
-    ) {
-
-        world.backwardsTravel +=
-            dt;
-
-    } else {
-
-        world.backwardsTravel *=
-            0.96;
-    }
-
-    world.lastZ =
-        player.z;
-}
-
-
-// ============================================================
-// SEGMENT STATE
-// ============================================================
-
-function updateWorld() {
-
-    const segmentIndex =
-        Math.floor(
-            player.z /
-            SEGMENT_LENGTH
-        );
-
-    const segment =
-        getSegment(
-            segmentIndex
-        );
-
-    if (
-        world.lastSegment !==
-        segmentIndex
-    ) {
-
-        world.lastSegment =
-            segmentIndex;
-
-        segment.visited++;
-
-        if (
-            segment.visited > 1
-        ) {
-
-            mutateSegment(
-                segment
-            );
-        }
-
-        world.visited.set(
-            segmentIndex,
-            segment.visited
-        );
-    }
-
-    maybeSpawnPresence(
-        segment
-    );
-
-    if (
-        world.lookingBack > 1.3
-    ) {
-
-        maybeSpawnBehind();
-    }
-}
-
-
-function mutateSegment(
-    segment
-) {
-
-    if (
-        segment.mutated
-    ) {
-        return;
-    }
-
-    segment.mutated = true;
-
-    const roll =
-        Math.random();
-
-    if (
-        world.intensity > .3 &&
-        roll < .45
-    ) {
-
-        segment.texture =
-            "writing";
-    }
-
-    if (
-        world.intensity > .55 &&
-        roll < .25
-    ) {
-
-        segment.texture =
-            "face";
-    }
-
-    if (
-        world.intensity > .7 &&
-        roll < .16
-    ) {
-
-        segment.texture =
-            "organic";
-    }
-
-    if (
-        world.intensity > .85 &&
-        roll < .08
-    ) {
-
-        segment.texture =
-            "corrupt";
-    }
-
-    world.mutationCounter++;
-
-    playTone(
-        35 +
-        Math.random() * 15,
-        2.5,
-        .012
-    );
-}
-
-
-// ============================================================
-// DRAW HELPERS
-// ============================================================
-
-function drawCube({
+function drawCube(
     x,
     y,
     z,
     sx,
     sy,
     sz,
-    color,
-    texture = null
-}) {
+    color
+) {
 
     const model =
         multiply(
+
             translation(
                 x,
                 y,
                 z
             ),
+
             scale(
                 sx,
                 sy,
@@ -1972,48 +1077,24 @@ function drawCube({
         );
 
     gl.uniformMatrix4fv(
-        locations.model,
+        loc.model,
         false,
         model
     );
 
     gl.uniform3fv(
-        locations.color,
+        loc.color,
         color
     );
 
-    if (texture) {
-
-        gl.activeTexture(
-            gl.TEXTURE0
-        );
-
-        gl.bindTexture(
-            gl.TEXTURE_2D,
-            texture
-        );
-
-        gl.uniform1i(
-            locations.texture,
-            0
-        );
-
-        gl.uniform1f(
-            locations.useTexture,
-            1
-        );
-
-    } else {
-
-        gl.uniform1f(
-            locations.useTexture,
-            0
-        );
-    }
+    gl.uniform1f(
+        loc.useTexture,
+        0
+    );
 
     gl.drawElements(
         gl.TRIANGLES,
-        cubeIndices.length,
+        indices.length,
         gl.UNSIGNED_SHORT,
         0
     );
@@ -2021,473 +1102,592 @@ function drawCube({
 
 
 // ============================================================
-// CORRIDOR
+// ROOM GEOMETRY
 // ============================================================
 
-function drawSegment(
-    segment
+function drawRoom(
+    id
 ) {
 
-    const z =
-        segment.index *
-        SEGMENT_LENGTH;
+    const state =
+        roomState(id);
 
-    const wallTexture =
-        textures[
-            segment.texture
-        ] ||
-        textures.normal;
+    const center =
+        roomCenter(id);
+
+    const wall = [
+        0.42,
+        0.40,
+        0.37
+    ];
+
+    const floor = [
+        0.34,
+        0.32,
+        0.30
+    ];
 
 
-    // --------------------------------------------------------
     // Floor
-    // --------------------------------------------------------
 
-    drawCube({
+    drawCube(
 
-        x: 0,
-
-        y: -0.05,
-
-        z:
-            z +
-            SEGMENT_LENGTH / 2,
-
-        sx:
-            CORRIDOR_WIDTH,
-
-        sy:
-            0.1,
-
-        sz:
-            SEGMENT_LENGTH,
-
-        color: [
-            0.42,
-            0.40,
-            0.37
-        ],
-
-        texture:
-            textures.normal
-    });
+        center,
+        -0.05,
+        center,
+        ROOM_WIDTH,
+        0.1,
+        ROOM_LENGTH,
+        floor
+    );
 
 
-    // --------------------------------------------------------
     // Ceiling
-    // --------------------------------------------------------
 
-    drawCube({
+    drawCube(
 
-        x: 0,
-
-        y:
-            segment.ceilingHeight,
-
-        z:
-            z +
-            SEGMENT_LENGTH / 2,
-
-        sx:
-            CORRIDOR_WIDTH,
-
-        sy:
-            0.12,
-
-        sz:
-            SEGMENT_LENGTH,
-
-        color: [
-            0.30,
-            0.29,
-            0.27
-        ],
-
-        texture:
-            textures.normal
-    });
+        center,
+        ROOM_HEIGHT,
+        center,
+        ROOM_WIDTH,
+        0.1,
+        ROOM_LENGTH,
+        wall
+    );
 
 
-    // --------------------------------------------------------
     // Left wall
-    // --------------------------------------------------------
 
-    drawCube({
+    drawCube(
 
-        x:
-            -CORRIDOR_WIDTH / 2,
+        center -
+        ROOM_WIDTH / 2,
 
-        y:
-            segment.ceilingHeight / 2,
+        ROOM_HEIGHT / 2,
 
-        z:
-            z +
-            SEGMENT_LENGTH / 2,
+        center,
 
-        sx:
-            0.12,
+        0.12,
 
-        sy:
-            segment.ceilingHeight,
+        ROOM_HEIGHT,
 
-        sz:
-            SEGMENT_LENGTH,
+        ROOM_LENGTH,
 
-        color: [
-            0.48,
-            0.46,
-            0.43
-        ],
-
-        texture:
-            wallTexture
-    });
+        wall
+    );
 
 
-    // --------------------------------------------------------
     // Right wall
+
+    drawCube(
+
+        center +
+        ROOM_WIDTH / 2,
+
+        ROOM_HEIGHT / 2,
+
+        center,
+
+        0.12,
+
+        ROOM_HEIGHT,
+
+        ROOM_LENGTH,
+
+        wall
+    );
+
+
+    // --------------------------------------------------------
+    // End wall.
+    //
+    // Normally the corridor continues.
+    // Certain persistent rooms can acquire an
+    // inexplicable internal wall.
     // --------------------------------------------------------
 
-    drawCube({
+    if (
+        !state.impossible
+    ) {
 
-        x:
-            CORRIDOR_WIDTH / 2,
+        drawCube(
 
-        y:
-            segment.ceilingHeight / 2,
+            center,
 
-        z:
-            z +
-            SEGMENT_LENGTH / 2,
+            ROOM_HEIGHT / 2,
 
-        sx:
+            center +
+            ROOM_LENGTH / 2,
+
+            ROOM_WIDTH,
+
+            ROOM_HEIGHT,
+
             0.12,
 
-        sy:
-            segment.ceilingHeight,
+            wall
+        );
 
-        sz:
-            SEGMENT_LENGTH,
+    } else {
 
-        color: [
-            0.48,
-            0.46,
-            0.43
-        ],
+        // The wall is moved one metre.
+        // It creates a subtle spatial contradiction.
 
-        texture:
-            wallTexture
-    });
+        drawCube(
+
+            center,
+
+            ROOM_HEIGHT / 2,
+
+            center +
+            ROOM_LENGTH / 2 -
+            1.4,
+
+            ROOM_WIDTH,
+
+            ROOM_HEIGHT,
+
+            0.12,
+
+            wall
+        );
+    }
 
 
     // --------------------------------------------------------
     // Ceiling light
     // --------------------------------------------------------
 
+    const lightColor =
+        state.lightChanged
+            ? [
+                0.35,
+                0.32,
+                0.29
+            ]
+            : [
+                0.95,
+                0.90,
+                0.78
+            ];
+
+    drawCube(
+
+        center,
+
+        ROOM_HEIGHT -
+        0.08,
+
+        center,
+
+        1.5,
+
+        0.04,
+
+        0.25,
+
+        lightColor
+    );
+
+
+    // --------------------------------------------------------
+    // Door
+    // --------------------------------------------------------
+
+    const doorZ =
+        state.doorMoved
+            ? center +
+              ROOM_LENGTH / 2 -
+              2
+            : center +
+              ROOM_LENGTH / 2 -
+              0.08;
+
+    drawCube(
+
+        center,
+
+        1.35,
+
+        doorZ,
+
+        1.4,
+
+        2.7,
+
+        0.10,
+
+        [
+            0.18,
+            0.17,
+            0.16
+        ]
+    );
+
+
+    // --------------------------------------------------------
+    // Chair
+    // --------------------------------------------------------
+
+    let chairX =
+        center - 1.2;
+
+    let chairZ =
+        center + 1;
+
     if (
-        !segment.lightFailure
+        state.chairMoved
     ) {
 
-        drawCube({
+        chairX =
+            center + 1.15;
 
-            x: 0,
+        chairZ =
+            center - 1.2;
+    }
 
-            y:
-                segment.ceilingHeight -
-                0.08,
+    drawChair(
+        chairX,
+        chairZ
+    );
 
-            z:
-                z +
-                SEGMENT_LENGTH / 2,
 
-            sx:
-                1.2,
+    // --------------------------------------------------------
+    // Second chair
+    // --------------------------------------------------------
 
-            sy:
-                0.035,
+    if (
+        state.secondChair
+    ) {
 
-            sz:
-                0.22,
+        drawChair(
 
-            color: [
-                1.0,
-                0.92,
-                0.78
-            ]
-        });
+            center - 1.0,
+
+            center - 2.3
+        );
     }
 }
 
 
-// ============================================================
-// PRESENCE DRAWING
-// ============================================================
-
-function drawPresence(
-    presence
+function drawChair(
+    x,
+    z
 ) {
 
-    const x =
-        presence.x;
-
-    const z =
-        presence.z;
-
-    const bodyColor = [
-        0.055,
-        0.052,
-        0.05
+    const wood = [
+        0.24,
+        0.22,
+        0.20
     ];
 
 
-    // torso
+    // seat
 
-    drawCube({
-
+    drawCube(
         x,
-
-        y: 1.15,
-
+        0.85,
         z,
-
-        sx: 0.48,
-
-        sy: 1.65,
-
-        sz: 0.30,
-
-        color:
-            bodyColor
-    });
+        0.9,
+        0.15,
+        0.9,
+        wood
+    );
 
 
-    // head
+    // back
 
-    drawCube({
-
+    drawCube(
         x,
-
-        y: 2.18,
-
-        z,
-
-        sx: 0.34,
-
-        sy: 0.42,
-
-        sz: 0.34,
-
-        color:
-            bodyColor
-    });
+        1.45,
+        z + 0.35,
+        0.9,
+        1.2,
+        0.12,
+        wood
+    );
 
 
     // legs
 
-    drawCube({
+    drawCube(
+        x - 0.32,
+        0.4,
+        z - 0.32,
+        0.12,
+        0.8,
+        0.12,
+        wood
+    );
 
-        x:
-            x - 0.13,
+    drawCube(
+        x + 0.32,
+        0.4,
+        z - 0.32,
+        0.12,
+        0.8,
+        0.12,
+        wood
+    );
 
-        y:
-            0.35,
+    drawCube(
+        x - 0.32,
+        0.4,
+        z + 0.32,
+        0.12,
+        0.8,
+        0.12,
+        wood
+    );
 
-        z,
-
-        sx:
-            0.14,
-
-        sy:
-            0.7,
-
-        sz:
-            0.16,
-
-        color:
-            bodyColor
-    });
-
-
-    drawCube({
-
-        x:
-            x + 0.13,
-
-        y:
-            0.35,
-
-        z,
-
-        sx:
-            0.14,
-
-        sy:
-            0.7,
-
-        sz:
-            0.16,
-
-        color:
-            bodyColor
-    });
+    drawCube(
+        x + 0.32,
+        0.4,
+        z + 0.32,
+        0.12,
+        0.8,
+        0.12,
+        wood
+    );
 }
 
 
-function updatePresences(
-    dt
-) {
+// ============================================================
+// IMPOSSIBLE OBJECT
+// ============================================================
+
+function drawImpossibleObject() {
+
+    if (
+        persistent.executions < 3
+    ) {
+        return;
+    }
+
+    const room =
+        0;
+
+    const state =
+        roomState(room);
+
+    if (
+        !state.impossible
+    ) {
+        return;
+    }
+
+    // A completely ordinary rectangular object
+    // intersecting the wall in a way that should
+    // not be possible.
+
+    drawCube(
+
+        -1.7,
+
+        1.0,
+
+        ROOM_LENGTH / 2 - 0.7,
+
+        1.8,
+
+        1.8,
+
+        1.8,
+
+        [
+            0.12,
+            0.11,
+            0.10
+        ]
+    );
+}
+
+
+// ============================================================
+// OBJECT OBSERVATION
+// ============================================================
+
+function observeWorld() {
 
     for (
-        let i =
-            world.presences.length - 1;
-
-        i >= 0;
-
-        i--
+        const object of objects
     ) {
 
-        const p =
-            world.presences[i];
-
-        p.age += dt;
-
-
-        // A presence can remain still for a long time.
-
         if (
-            p.mode === "approach" &&
-            world.intensity > .72
+            object.room !==
+            world.room
         ) {
-
-            const dx =
-                player.x - p.x;
-
-            const dz =
-                player.z - p.z;
-
-            const distance =
-                Math.hypot(
-                    dx,
-                    dz
-                );
-
-            if (
-                distance > 2.5
-            ) {
-
-                p.x +=
-                    (dx / distance) *
-                    p.speed *
-                    dt;
-
-                p.z +=
-                    (dz / distance) *
-                    p.speed *
-                    dt;
-            }
+            continue;
         }
 
+        const dx =
+            player.x -
+            object.x;
+
+        const dz =
+            player.z -
+            object.z;
 
         const distance =
             Math.hypot(
-                player.x - p.x,
-                player.z - p.z
+                dx,
+                dz
             );
 
-        p.visibleTime +=
-            dt;
-
-
-        // Sometimes a presence is simply gone
-        // when the player gets close.
-
         if (
-            distance < 2.2 &&
-            p.age > 3
+            distance < 2.4 &&
+            !object.seen
         ) {
 
-            if (
-                Math.random() <
-                0.012
-            ) {
+            object.seen = true;
 
-                world.presences.splice(
-                    i,
-                    1
-                );
+            const key =
+                `${object.type}_${object.room}`;
 
-                playTone(
-                    28,
-                    1.2,
-                    .018
-                );
-            }
-        }
+            persistent.objectsSeen[key] =
+                true;
 
-
-        // Very old presences disappear eventually,
-        // preventing unlimited accumulation.
-
-        if (
-            p.age > 90
-        ) {
-
-            world.presences.splice(
-                i,
-                1
-            );
+            saveState();
         }
     }
 }
 
 
 // ============================================================
-// RENDER
+// WALKING
 // ============================================================
 
-function resize() {
+let lastPosition = {
+    x: player.x,
+    z: player.z
+};
 
-    const dpr =
-        Math.min(
-            window.devicePixelRatio || 1,
-            2
+
+function updatePlayer(dt) {
+
+    let forward = 0;
+    let strafe = 0;
+
+    if (keys["w"]) {
+        forward++;
+    }
+
+    if (keys["s"]) {
+        forward--;
+    }
+
+    if (keys["a"]) {
+        strafe--;
+    }
+
+    if (keys["d"]) {
+        strafe++;
+    }
+
+
+    if (
+        forward === 0 &&
+        strafe === 0
+    ) {
+        return;
+    }
+
+
+    const length =
+        Math.hypot(
+            forward,
+            strafe
         );
 
-    canvas.width =
-        Math.floor(
-            window.innerWidth *
-            dpr
+    forward /= length;
+    strafe /= length;
+
+
+    const fx =
+        -Math.sin(
+            player.yaw
         );
 
-    canvas.height =
-        Math.floor(
-            window.innerHeight *
-            dpr
+    const fz =
+        -Math.cos(
+            player.yaw
         );
 
-    gl.viewport(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+    const rx =
+        Math.cos(
+            player.yaw
+        );
+
+    const rz =
+        -Math.sin(
+            player.yaw
+        );
+
+
+    player.x +=
+        (
+            fx * forward +
+            rx * strafe
+        ) *
+        player.speed *
+        dt;
+
+
+    player.z +=
+        (
+            fz * forward +
+            rz * strafe
+        ) *
+        player.speed *
+        dt;
+
+
+    // --------------------------------------------------------
+    // Collision with corridor walls.
+    // --------------------------------------------------------
+
+    const limit =
+        ROOM_WIDTH / 2 -
+        0.35;
+
+    player.x =
+        Math.max(
+            -limit,
+            Math.min(
+                limit,
+                player.x
+            )
+        );
+
+
+    persistent.totalDistance +=
+        Math.hypot(
+
+            player.x -
+            lastPosition.x,
+
+            player.z -
+            lastPosition.z
+        );
+
+    lastPosition.x =
+        player.x;
+
+    lastPosition.z =
+        player.z;
 }
 
 
-window.addEventListener(
-    "resize",
-    resize
-);
-
-resize();
-
+// ============================================================
+// CAMERA
+// ============================================================
 
 function render() {
 
     gl.clearColor(
+        0.006,
+        0.006,
         0.005,
-        0.005,
-        0.004,
         1
     );
 
@@ -2501,13 +1701,10 @@ function render() {
     );
 
 
-    // --------------------------------------------------------
-    // Projection
-    // --------------------------------------------------------
-
     const aspect =
         canvas.width /
         canvas.height;
+
 
     const projection =
         perspective(
@@ -2520,22 +1717,16 @@ function render() {
 
             0.05,
 
-            180
+            100
         );
 
+
     gl.uniformMatrix4fv(
-        locations.projection,
+        loc.projection,
         false,
         projection
     );
 
-
-    // --------------------------------------------------------
-    // Camera
-    // --------------------------------------------------------
-
-    const lookDistance =
-        1;
 
     const direction = {
 
@@ -2565,16 +1756,13 @@ function render() {
     const target = [
 
         player.x +
-        direction.x *
-        lookDistance,
+        direction.x,
 
         player.y +
-        direction.y *
-        lookDistance,
+        direction.y,
 
         player.z +
-        direction.z *
-        lookDistance
+        direction.z
     ];
 
 
@@ -2589,23 +1777,19 @@ function render() {
 
             target,
 
-            [
-                0,
-                1,
-                0
-            ]
+            [0,1,0]
         );
 
 
     gl.uniformMatrix4fv(
-        locations.view,
+        loc.view,
         false,
         view
     );
 
 
     gl.uniform3fv(
-        locations.cameraPosition,
+        loc.camera,
         [
             player.x,
             player.y,
@@ -2615,164 +1799,107 @@ function render() {
 
 
     // --------------------------------------------------------
-    // Lighting
+    // Light
     // --------------------------------------------------------
 
-    const currentSegment =
-        Math.floor(
-            player.z /
-            SEGMENT_LENGTH
+    const currentRoom =
+        roomState(
+            world.room
         );
 
-
-    const lightSegment =
-        getSegment(
-            currentSegment
+    const roomCenterZ =
+        roomCenter(
+            world.room
         );
-
-
-    const lightZ =
-        currentSegment *
-        SEGMENT_LENGTH +
-        SEGMENT_LENGTH / 2;
 
 
     gl.uniform3fv(
-        locations.lightPosition,
+        loc.light,
         [
-            0,
-            lightSegment.ceilingHeight -
-            0.15,
-            lightZ
+
+            roomCenterZ === 0
+                ? 0
+                : 0,
+
+            ROOM_HEIGHT - 0.15,
+
+            roomCenterZ
         ]
     );
 
 
-    if (
-        lightSegment.lightFailure
-    ) {
-
-        gl.uniform1f(
-            locations.lightIntensity,
-            0.15
-        );
-
-    } else {
-
-        gl.uniform1f(
-            locations.lightIntensity,
-            0.95
-        );
-    }
-
-
     gl.uniform1f(
-        locations.lightRadius,
-        9.5
-    );
-
-
-    // This is deliberately non-zero.
-    // It is what keeps the corridor visible
-    // when the fluorescent light is far away.
-
-    gl.uniform1f(
-        locations.ambient,
-        0.22
-    );
-
-
-    gl.uniform1f(
-        locations.fogStart,
-        22
-    );
-
-    gl.uniform1f(
-        locations.fogEnd,
-        55
+        loc.ambient,
+        currentRoom.lightChanged
+            ? 0.16
+            : 0.24
     );
 
 
     // --------------------------------------------------------
-    // Draw nearby corridor.
+    // Draw nearby rooms.
     // --------------------------------------------------------
-
-    const center =
-        currentSegment;
-
 
     for (
-        let i = center - 5;
-        i <= center + 7;
+        let i =
+            world.room - 2;
+
+        i <=
+        world.room + 3;
+
         i++
     ) {
 
-        drawSegment(
-            getSegment(i)
-        );
+        drawRoom(i);
     }
 
 
-    // --------------------------------------------------------
-    // Presences
-    // --------------------------------------------------------
-
-    for (
-        const presence of
-        world.presences
-    ) {
-
-        drawPresence(
-            presence
-        );
-    }
+    drawImpossibleObject();
 }
 
 
 // ============================================================
-// MAIN LOOP
+// RESIZE
 // ============================================================
 
-let lastTime =
-    performance.now();
+function resize() {
 
-
-function loop(
-    now
-) {
-
-    const dt =
+    const dpr =
         Math.min(
-            (now - lastTime) /
-            1000,
-            0.05
+            window.devicePixelRatio || 1,
+            2
         );
 
-    lastTime =
-        now;
-
-    if (
-        started
-    ) {
-
-        updatePlayer(
-            dt
+    canvas.width =
+        Math.floor(
+            innerWidth * dpr
         );
 
-        updateWorld();
-
-        updatePresences(
-            dt
+    canvas.height =
+        Math.floor(
+            innerHeight * dpr
         );
 
-        render();
-    }
-
-    requestAnimationFrame(
-        loop
+    gl.viewport(
+        0,
+        0,
+        canvas.width,
+        canvas.height
     );
 }
 
+
+window.addEventListener(
+    "resize",
+    resize
+);
+
+resize();
+
+
+// ============================================================
+// START
+// ============================================================
 
 let started = false;
 
@@ -2785,17 +1912,22 @@ function start() {
 
     started = true;
 
-    startAudio();
-
-    intro.classList.add(
+    boot.classList.add(
         "hidden"
     );
 
+    initAudio();
+
     canvas.requestPointerLock();
 
-    lastTime =
-        performance.now();
+    strangeSound();
 }
+
+
+boot.addEventListener(
+    "click",
+    start
+);
 
 
 document.addEventListener(
@@ -2812,10 +1944,43 @@ document.addEventListener(
 );
 
 
-intro.addEventListener(
-    "click",
-    start
-);
+// ============================================================
+// LOOP
+// ============================================================
+
+let lastTime =
+    performance.now();
+
+
+function loop(now) {
+
+    const dt =
+        Math.min(
+            (now - lastTime) /
+            1000,
+            0.05
+        );
+
+    lastTime =
+        now;
+
+
+    if (started) {
+
+        updatePlayer(dt);
+
+        updateRoom();
+
+        observeWorld();
+
+        render();
+    }
+
+
+    requestAnimationFrame(
+        loop
+    );
+}
 
 
 requestAnimationFrame(
