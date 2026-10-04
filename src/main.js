@@ -11,6 +11,7 @@ if (!gl) {
 // ============================================================
 
 const vertexShaderSource = `
+
 attribute vec3 a_position;
 attribute vec3 a_normal;
 
@@ -23,11 +24,16 @@ varying vec3 v_worldPosition;
 
 void main() {
 
-    vec4 worldPosition = u_model * vec4(a_position, 1.0);
+    vec4 worldPosition =
+        u_model *
+        vec4(a_position, 1.0);
 
-    v_worldPosition = worldPosition.xyz;
+    v_worldPosition =
+        worldPosition.xyz;
 
-    v_normal = mat3(u_model) * a_normal;
+    v_normal =
+        mat3(u_model) *
+        a_normal;
 
     gl_Position =
         u_projection *
@@ -36,7 +42,9 @@ void main() {
 }
 `;
 
+
 const fragmentShaderSource = `
+
 precision mediump float;
 
 varying vec3 v_normal;
@@ -46,24 +54,48 @@ uniform vec3 u_lightPosition;
 
 void main() {
 
-    vec3 normal = normalize(v_normal);
+    vec3 normal =
+        normalize(v_normal);
 
     vec3 lightDirection =
-        normalize(u_lightPosition - v_worldPosition);
+        normalize(
+            u_lightPosition -
+            v_worldPosition
+        );
 
     float diffuse =
-        max(dot(normal, lightDirection), 0.0);
+        max(
+            dot(
+                normal,
+                lightDirection
+            ),
+            0.0
+        );
 
-    float ambient = 0.18;
+    // Much stronger ambient illumination.
+    float ambient = 0.45;
 
     float light =
-        ambient + diffuse * 0.82;
+        ambient +
+        diffuse * 0.75;
 
+    // Lighter base material.
     vec3 baseColor =
-        vec3(0.12, 0.14, 0.16);
+        vec3(
+            0.32,
+            0.36,
+            0.40
+        );
+
+    vec3 finalColor =
+        baseColor *
+        light;
 
     gl_FragColor =
-        vec4(baseColor * light, 1.0);
+        vec4(
+            finalColor,
+            1.0
+        );
 }
 `;
 
@@ -74,12 +106,22 @@ void main() {
 
 function createShader(type, source) {
 
-    const shader = gl.createShader(type);
+    const shader =
+        gl.createShader(type);
 
-    gl.shaderSource(shader, source);
+    gl.shaderSource(
+        shader,
+        source
+    );
+
     gl.compileShader(shader);
 
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    if (
+        !gl.getShaderParameter(
+            shader,
+            gl.COMPILE_STATUS
+        )
+    ) {
 
         console.error(
             gl.getShaderInfoLog(shader)
@@ -87,14 +129,19 @@ function createShader(type, source) {
 
         gl.deleteShader(shader);
 
-        throw new Error("Shader compilation failed.");
+        throw new Error(
+            "Shader compilation failed."
+        );
     }
 
     return shader;
 }
 
 
-function createProgram(vertexSource, fragmentSource) {
+function createProgram(
+    vertexSource,
+    fragmentSource
+) {
 
     const vertexShader =
         createShader(
@@ -111,21 +158,34 @@ function createProgram(vertexSource, fragmentSource) {
     const program =
         gl.createProgram();
 
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(
+    gl.attachShader(
         program,
-        gl.LINK_STATUS
-    )) {
+        vertexShader
+    );
+
+    gl.attachShader(
+        program,
+        fragmentShader
+    );
+
+    gl.linkProgram(
+        program
+    );
+
+    if (
+        !gl.getProgramParameter(
+            program,
+            gl.LINK_STATUS
+        )
+    ) {
 
         console.error(
             gl.getProgramInfoLog(program)
         );
 
-        throw new Error("Program linking failed.");
+        throw new Error(
+            "Program linking failed."
+        );
     }
 
     return program;
@@ -142,88 +202,90 @@ gl.useProgram(program);
 
 
 // ============================================================
-// CUBE GEOMETRY
+// CUBE
 // ============================================================
 
 function createCube() {
 
     const positions = [
 
-        // Front
+        // FRONT
         -0.5, -0.5,  0.5,
          0.5, -0.5,  0.5,
          0.5,  0.5,  0.5,
         -0.5,  0.5,  0.5,
 
-        // Back
+        // BACK
         -0.5, -0.5, -0.5,
         -0.5,  0.5, -0.5,
          0.5,  0.5, -0.5,
          0.5, -0.5, -0.5,
 
-        // Top
+        // TOP
         -0.5,  0.5, -0.5,
         -0.5,  0.5,  0.5,
          0.5,  0.5,  0.5,
          0.5,  0.5, -0.5,
 
-        // Bottom
+        // BOTTOM
         -0.5, -0.5, -0.5,
          0.5, -0.5, -0.5,
          0.5, -0.5,  0.5,
         -0.5, -0.5,  0.5,
 
-        // Right
+        // RIGHT
          0.5, -0.5, -0.5,
          0.5,  0.5, -0.5,
          0.5,  0.5,  0.5,
          0.5, -0.5,  0.5,
 
-        // Left
+        // LEFT
         -0.5, -0.5, -0.5,
         -0.5, -0.5,  0.5,
         -0.5,  0.5,  0.5,
         -0.5,  0.5, -0.5
     ];
 
+
     const normals = [
 
-        // Front
+        // FRONT
          0,  0,  1,
          0,  0,  1,
          0,  0,  1,
          0,  0,  1,
 
-        // Back
+        // BACK
          0,  0, -1,
          0,  0, -1,
          0,  0, -1,
          0,  0, -1,
 
-        // Top
+        // TOP
          0,  1,  0,
          0,  1,  0,
          0,  1,  0,
          0,  1,  0,
 
-        // Bottom
+        // BOTTOM
          0, -1,  0,
          0, -1,  0,
          0, -1,  0,
          0, -1,  0,
 
-        // Right
+        // RIGHT
          1,  0,  0,
          1,  0,  0,
          1,  0,  0,
          1,  0,  0,
 
-        // Left
+        // LEFT
         -1,  0,  0,
         -1,  0,  0,
         -1,  0,  0,
         -1,  0,  0
     ];
+
 
     const indices = [
 
@@ -246,6 +308,7 @@ function createCube() {
         20, 22, 23
     ];
 
+
     return {
         positions,
         normals,
@@ -254,11 +317,12 @@ function createCube() {
 }
 
 
-const cube = createCube();
+const cube =
+    createCube();
 
 
 // ============================================================
-// GPU BUFFERS
+// BUFFERS
 // ============================================================
 
 function createBuffer(data) {
@@ -282,10 +346,15 @@ function createBuffer(data) {
 
 
 const positionBuffer =
-    createBuffer(cube.positions);
+    createBuffer(
+        cube.positions
+    );
+
 
 const normalBuffer =
-    createBuffer(cube.normals);
+    createBuffer(
+        cube.normals
+    );
 
 
 const indexBuffer =
@@ -298,7 +367,9 @@ gl.bindBuffer(
 
 gl.bufferData(
     gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(cube.indices),
+    new Uint16Array(
+        cube.indices
+    ),
     gl.STATIC_DRAW
 );
 
@@ -312,6 +383,7 @@ const positionLocation =
         program,
         "a_position"
     );
+
 
 const normalLocation =
     gl.getAttribLocation(
@@ -357,6 +429,7 @@ gl.vertexAttribPointer(
     0
 );
 
+
 gl.bindBuffer(
     gl.ELEMENT_ARRAY_BUFFER,
     indexBuffer
@@ -364,23 +437,32 @@ gl.bindBuffer(
 
 
 // ============================================================
-// MATRICES
+// MATRIX FUNCTIONS
 // ============================================================
 
 function identity() {
 
     return new Float32Array([
+
         1, 0, 0, 0,
+
         0, 1, 0, 0,
+
         0, 0, 1, 0,
+
         0, 0, 0, 1
     ]);
 }
 
 
-function translation(x, y, z) {
+function translation(
+    x,
+    y,
+    z
+) {
 
-    const matrix = identity();
+    const matrix =
+        identity();
 
     matrix[12] = x;
     matrix[13] = y;
@@ -390,9 +472,14 @@ function translation(x, y, z) {
 }
 
 
-function scale(x, y, z) {
+function scale(
+    x,
+    y,
+    z
+) {
 
-    const matrix = identity();
+    const matrix =
+        identity();
 
     matrix[0] = x;
     matrix[5] = y;
@@ -402,22 +489,51 @@ function scale(x, y, z) {
 }
 
 
-function multiply(a, b) {
+function multiply(
+    a,
+    b
+) {
 
     const result =
         new Float32Array(16);
 
-    for (let row = 0; row < 4; row++) {
 
-        for (let column = 0; column < 4; column++) {
+    for (
+        let row = 0;
+        row < 4;
+        row++
+    ) {
 
-            result[column * 4 + row] =
-                a[row]       * b[column * 4] +
-                a[4 + row]   * b[column * 4 + 1] +
-                a[8 + row]   * b[column * 4 + 2] +
-                a[12 + row]  * b[column * 4 + 3];
+        for (
+            let column = 0;
+            column < 4;
+            column++
+        ) {
+
+            result[
+                column * 4 + row
+            ] =
+
+                a[row] *
+                b[column * 4]
+
+                +
+
+                a[4 + row] *
+                b[column * 4 + 1]
+
+                +
+
+                a[8 + row] *
+                b[column * 4 + 2]
+
+                +
+
+                a[12 + row] *
+                b[column * 4 + 3];
         }
     }
+
 
     return result;
 }
@@ -432,17 +548,26 @@ function perspective(
 
     const f =
         1 /
-        Math.tan(fov / 2);
+        Math.tan(
+            fov / 2
+        );
 
     const range =
         1 /
         (near - far);
 
+
     return new Float32Array([
 
-        f / aspect, 0, 0, 0,
+        f / aspect,
+        0,
+        0,
+        0,
 
-        0, f, 0, 0,
+        0,
+        f,
+        0,
+        0,
 
         0,
         0,
@@ -457,31 +582,49 @@ function perspective(
 }
 
 
-function rotationY(angle) {
+function rotationY(
+    angle
+) {
 
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
+    const c =
+        Math.cos(angle);
+
+    const s =
+        Math.sin(angle);
+
 
     return new Float32Array([
 
          c, 0, -s, 0,
+
          0, 1,  0, 0,
+
          s, 0,  c, 0,
+
          0, 0,  0, 1
     ]);
 }
 
 
-function rotationX(angle) {
+function rotationX(
+    angle
+) {
 
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
+    const c =
+        Math.cos(angle);
+
+    const s =
+        Math.sin(angle);
+
 
     return new Float32Array([
 
         1, 0,  0, 0,
+
         0, c,  s, 0,
+
         0, -s, c, 0,
+
         0, 0,  0, 1
     ]);
 }
@@ -494,8 +637,11 @@ function rotationX(angle) {
 const camera = {
 
     position: {
+
         x: 0,
+
         y: 1.7,
+
         z: 7
     },
 
@@ -508,6 +654,7 @@ const camera = {
 
 
 const keys = {};
+
 
 window.addEventListener(
     "keydown",
@@ -530,10 +677,12 @@ window.addEventListener(
 
 
 // ============================================================
-// MOUSE LOOK
+// MOUSE
 // ============================================================
 
-let pointerLocked = false;
+let pointerLocked =
+    false;
+
 
 canvas.addEventListener(
     "click",
@@ -550,13 +699,18 @@ document.addEventListener(
     () => {
 
         pointerLocked =
-            document.pointerLockElement === canvas;
+            document.pointerLockElement ===
+            canvas;
+
 
         document.getElementById(
             "status"
         ).textContent =
+
             pointerLocked
+
                 ? "WASD / MOUSE"
+
                 : "CLICK TO ENTER";
     }
 );
@@ -570,22 +724,30 @@ document.addEventListener(
             return;
         }
 
-        const sensitivity = 0.002;
+
+        const sensitivity =
+            0.002;
+
 
         camera.yaw -=
             event.movementX *
             sensitivity;
 
+
         camera.pitch -=
             event.movementY *
             sensitivity;
 
+
         const limit =
-            Math.PI / 2 - 0.05;
+            Math.PI / 2 -
+            0.05;
+
 
         camera.pitch =
             Math.max(
                 -limit,
+
                 Math.min(
                     limit,
                     camera.pitch
@@ -596,13 +758,16 @@ document.addEventListener(
 
 
 // ============================================================
-// CAMERA MOVEMENT
+// MOVEMENT
 // ============================================================
 
-function updateCamera(deltaTime) {
+function updateCamera(
+    deltaTime
+) {
 
     let forward = 0;
     let right = 0;
+
 
     if (keys["KeyW"]) {
         forward += 1;
@@ -620,35 +785,55 @@ function updateCamera(deltaTime) {
         right -= 1;
     }
 
+
     const length =
         Math.hypot(
             forward,
             right
         );
 
+
     if (length === 0) {
         return;
     }
 
+
     forward /= length;
     right /= length;
+
 
     const speed =
         camera.speed *
         deltaTime;
 
+
     const sin =
-        Math.sin(camera.yaw);
+        Math.sin(
+            camera.yaw
+        );
+
 
     const cos =
-        Math.cos(camera.yaw);
+        Math.cos(
+            camera.yaw
+        );
+
 
     camera.position.x +=
-        (sin * forward + cos * right) *
+
+        (
+            sin * forward +
+            cos * right
+        ) *
         speed;
 
+
     camera.position.z +=
-        (cos * forward - sin * right) *
+
+        (
+            cos * forward -
+            sin * right
+        ) *
         speed;
 }
 
@@ -666,18 +851,22 @@ function getViewMatrix() {
             -camera.position.z
         );
 
+
     const pitch =
         rotationX(
             -camera.pitch
         );
+
 
     const yaw =
         rotationY(
             -camera.yaw
         );
 
+
     return multiply(
         pitch,
+
         multiply(
             yaw,
             cameraTranslation
@@ -687,48 +876,54 @@ function getViewMatrix() {
 
 
 // ============================================================
-// ROOM
+// ROOM OBJECTS
 // ============================================================
 
 const objects = [
 
-    // Floor
+    // FLOOR
     {
         position: [0, -0.1, 0],
         scale: [10, 0.2, 10]
     },
 
-    // Ceiling
+
+    // CEILING
     {
         position: [0, 4, 0],
         scale: [10, 0.2, 10]
     },
 
-    // Back wall
+
+    // BACK WALL
     {
         position: [0, 2, -5],
         scale: [10, 4, 0.2]
     },
 
-    // Front wall
+
+    // FRONT WALL
     {
         position: [0, 2, 5],
         scale: [10, 4, 0.2]
     },
 
-    // Left wall
+
+    // LEFT WALL
     {
         position: [-5, 2, 0],
         scale: [0.2, 4, 10]
     },
 
-    // Right wall
+
+    // RIGHT WALL
     {
         position: [5, 2, 0],
         scale: [0.2, 4, 10]
     },
 
-    // Strange object in the middle
+
+    // CENTRAL OBJECT
     {
         position: [0, 1, 0],
         scale: [1, 2, 1]
@@ -746,17 +941,20 @@ const modelLocation =
         "u_model"
     );
 
+
 const viewLocation =
     gl.getUniformLocation(
         program,
         "u_view"
     );
 
+
 const projectionLocation =
     gl.getUniformLocation(
         program,
         "u_projection"
     );
+
 
 const lightLocation =
     gl.getUniformLocation(
@@ -772,23 +970,31 @@ const lightLocation =
 function resize() {
 
     const pixelRatio =
-        window.devicePixelRatio || 1;
+        window.devicePixelRatio ||
+        1;
+
 
     const width =
         canvas.clientWidth *
         pixelRatio;
 
+
     const height =
         canvas.clientHeight *
         pixelRatio;
+
 
     if (
         canvas.width !== width ||
         canvas.height !== height
     ) {
 
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width =
+            width;
+
+        canvas.height =
+            height;
+
 
         gl.viewport(
             0,
@@ -807,35 +1013,49 @@ window.addEventListener(
 
 
 // ============================================================
-// RENDER
+// RENDER LOOP
 // ============================================================
 
 let previousTime = 0;
 
+
 function render(time) {
 
     const deltaTime =
+
         Math.min(
-            (time - previousTime) / 1000,
+            (time - previousTime) /
+            1000,
+
             0.1
         );
 
-    previousTime = time;
+
+    previousTime =
+        time;
+
 
     resize();
 
-    updateCamera(deltaTime);
+
+    updateCamera(
+        deltaTime
+    );
+
 
     gl.enable(
         gl.DEPTH_TEST
     );
 
+
+    // Slightly brighter background.
     gl.clearColor(
-        0.01,
-        0.01,
-        0.015,
+        0.025,
+        0.03,
+        0.04,
         1
     );
+
 
     gl.clear(
         gl.COLOR_BUFFER_BIT |
@@ -847,6 +1067,7 @@ function render(time) {
         canvas.width /
         canvas.height;
 
+
     const projection =
         perspective(
             Math.PI / 3,
@@ -854,6 +1075,7 @@ function render(time) {
             0.1,
             100
         );
+
 
     const view =
         getViewMatrix();
@@ -865,6 +1087,7 @@ function render(time) {
         view
     );
 
+
     gl.uniformMatrix4fv(
         projectionLocation,
         false,
@@ -872,23 +1095,30 @@ function render(time) {
     );
 
 
+    // Main light.
     gl.uniform3f(
         lightLocation,
-        2,
-        4,
-        2
+
+        0,
+        8,
+        1
     );
 
 
-    for (const object of objects) {
+    for (
+        const object of objects
+    ) {
 
         const model =
+
             multiply(
+
                 translation(
                     object.position[0],
                     object.position[1],
                     object.position[2]
                 ),
+
                 scale(
                     object.scale[0],
                     object.scale[1],
@@ -896,16 +1126,22 @@ function render(time) {
                 )
             );
 
+
         gl.uniformMatrix4fv(
             modelLocation,
             false,
             model
         );
 
+
         gl.drawElements(
+
             gl.TRIANGLES,
+
             cube.indices.length,
+
             gl.UNSIGNED_SHORT,
+
             0
         );
     }
