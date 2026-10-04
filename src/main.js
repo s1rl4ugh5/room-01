@@ -72,14 +72,12 @@ void main() {
             0.0
         );
 
-    // Much stronger ambient illumination.
     float ambient = 0.45;
 
     float light =
         ambient +
         diffuse * 0.75;
 
-    // Lighter base material.
     vec3 baseColor =
         vec3(
             0.32,
@@ -101,7 +99,7 @@ void main() {
 
 
 // ============================================================
-// SHADER COMPILATION
+// SHADER CREATION
 // ============================================================
 
 function createShader(type, source) {
@@ -202,7 +200,7 @@ gl.useProgram(program);
 
 
 // ============================================================
-// CUBE
+// CUBE GEOMETRY
 // ============================================================
 
 function createCube() {
@@ -322,7 +320,7 @@ const cube =
 
 
 // ============================================================
-// BUFFERS
+// GPU BUFFERS
 // ============================================================
 
 function createBuffer(data) {
@@ -445,11 +443,8 @@ function identity() {
     return new Float32Array([
 
         1, 0, 0, 0,
-
         0, 1, 0, 0,
-
         0, 0, 1, 0,
-
         0, 0, 0, 1
     ]);
 }
@@ -489,14 +484,10 @@ function scale(
 }
 
 
-function multiply(
-    a,
-    b
-) {
+function multiply(a, b) {
 
     const result =
         new Float32Array(16);
-
 
     for (
         let row = 0;
@@ -534,7 +525,6 @@ function multiply(
         }
     }
 
-
     return result;
 }
 
@@ -555,7 +545,6 @@ function perspective(
     const range =
         1 /
         (near - far);
-
 
     return new Float32Array([
 
@@ -582,9 +571,7 @@ function perspective(
 }
 
 
-function rotationY(
-    angle
-) {
+function rotationY(angle) {
 
     const c =
         Math.cos(angle);
@@ -592,23 +579,17 @@ function rotationY(
     const s =
         Math.sin(angle);
 
-
     return new Float32Array([
 
          c, 0, -s, 0,
-
          0, 1,  0, 0,
-
          s, 0,  c, 0,
-
          0, 0,  0, 1
     ]);
 }
 
 
-function rotationX(
-    angle
-) {
+function rotationX(angle) {
 
     const c =
         Math.cos(angle);
@@ -616,15 +597,11 @@ function rotationX(
     const s =
         Math.sin(angle);
 
-
     return new Float32Array([
 
         1, 0,  0, 0,
-
         0, c,  s, 0,
-
         0, -s, c, 0,
-
         0, 0,  0, 1
     ]);
 }
@@ -632,6 +609,15 @@ function rotationX(
 
 // ============================================================
 // CAMERA
+// ============================================================
+
+// IMPORTANT:
+//
+// The room goes from -5 to +5 on the Z axis.
+// We start at Z = 3, therefore INSIDE the room.
+//
+// The camera initially looks toward -Z.
+//
 // ============================================================
 
 const camera = {
@@ -642,7 +628,7 @@ const camera = {
 
         y: 1.7,
 
-        z: 7
+        z: 3
     },
 
     yaw: 0,
@@ -656,12 +642,25 @@ const camera = {
 const keys = {};
 
 
+// ============================================================
+// KEYBOARD
+// ============================================================
+
 window.addEventListener(
     "keydown",
     event => {
 
         keys[event.code] = true;
 
+
+        // ENTER activates pointer lock.
+        if (
+            event.code === "Enter" &&
+            !pointerLocked
+        ) {
+
+            canvas.requestPointerLock();
+        }
     }
 );
 
@@ -671,13 +670,12 @@ window.addEventListener(
     event => {
 
         keys[event.code] = false;
-
     }
 );
 
 
 // ============================================================
-// MOUSE
+// POINTER LOCK
 // ============================================================
 
 let pointerLocked =
@@ -689,7 +687,6 @@ canvas.addEventListener(
     () => {
 
         canvas.requestPointerLock();
-
     }
 );
 
@@ -709,9 +706,9 @@ document.addEventListener(
 
             pointerLocked
 
-                ? "WASD / MOUSE"
+                ? "WASD / MOUSE / ENTER"
 
-                : "CLICK TO ENTER";
+                : "CLICK OR ENTER";
     }
 );
 
@@ -758,29 +755,34 @@ document.addEventListener(
 
 
 // ============================================================
-// MOVEMENT
+// CAMERA MOVEMENT
 // ============================================================
 
-function updateCamera(
-    deltaTime
-) {
+function updateCamera(deltaTime) {
 
     let forward = 0;
     let right = 0;
 
 
+    // W = FORWARD
     if (keys["KeyW"]) {
         forward += 1;
     }
 
+
+    // S = BACKWARD
     if (keys["KeyS"]) {
         forward -= 1;
     }
 
+
+    // D = RIGHT
     if (keys["KeyD"]) {
         right += 1;
     }
 
+
+    // A = LEFT
     if (keys["KeyA"]) {
         right -= 1;
     }
@@ -819,10 +821,16 @@ function updateCamera(
         );
 
 
+    // FIXED:
+    //
+    // W now moves toward the direction
+    // the camera is looking.
+    //
+
     camera.position.x +=
 
         (
-            sin * forward +
+            -sin * forward +
             cos * right
         ) *
         speed;
@@ -831,7 +839,7 @@ function updateCamera(
     camera.position.z +=
 
         (
-            cos * forward -
+            -cos * forward -
             sin * right
         ) *
         speed;
@@ -876,7 +884,7 @@ function getViewMatrix() {
 
 
 // ============================================================
-// ROOM OBJECTS
+// ROOM
 // ============================================================
 
 const objects = [
@@ -1013,7 +1021,7 @@ window.addEventListener(
 
 
 // ============================================================
-// RENDER LOOP
+// RENDER
 // ============================================================
 
 let previousTime = 0;
@@ -1022,11 +1030,8 @@ let previousTime = 0;
 function render(time) {
 
     const deltaTime =
-
         Math.min(
-            (time - previousTime) /
-            1000,
-
+            (time - previousTime) / 1000,
             0.1
         );
 
@@ -1048,7 +1053,6 @@ function render(time) {
     );
 
 
-    // Slightly brighter background.
     gl.clearColor(
         0.025,
         0.03,
@@ -1095,10 +1099,9 @@ function render(time) {
     );
 
 
-    // Main light.
+    // Light positioned above the room.
     gl.uniform3f(
         lightLocation,
-
         0,
         8,
         1
@@ -1110,7 +1113,6 @@ function render(time) {
     ) {
 
         const model =
-
             multiply(
 
                 translation(
@@ -1135,13 +1137,9 @@ function render(time) {
 
 
         gl.drawElements(
-
             gl.TRIANGLES,
-
             cube.indices.length,
-
             gl.UNSIGNED_SHORT,
-
             0
         );
     }
