@@ -1,668 +1,1514 @@
-const canvas = document.getElementById("canvas");
-const gl = canvas.getContext("webgl", {
-    antialias: false,
-    alpha: false,
-    depth: true
-});
-
-if (!gl) {
-    document.body.innerHTML = "<pre>WebGL unavailable.</pre>";
-    throw new Error("WebGL unavailable");
-}
+import * as THREE from "three";
 
 /* ============================================================
    ROOM_01
-   FOREST / FOG / REACTIVE WORLD
+   MICRO METAVERSE ENGINE
    ============================================================ */
 
-const TAU = Math.PI * 2;
+const canvas =
+    document.getElementById("world");
 
-let width = 1;
-let height = 1;
+const renderer =
+    new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        powerPreference: "high-performance"
+    });
 
-function resize() {
-    width = window.innerWidth;
-    height = window.innerHeight;
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 1.75)
+);
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
 
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
+renderer.shadowMap.enabled = true;
 
-    gl.viewport(0, 0, canvas.width, canvas.height);
-}
+renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
 
-window.addEventListener("resize", resize);
-resize();
+renderer.outputColorSpace =
+    THREE.SRGBColorSpace;
+
+renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
+renderer.toneMappingExposure = 1.15;
+
 
 /* ============================================================
-   SHADERS
+   SCENE
    ============================================================ */
 
-const vertexShaderSource = `
-attribute vec3 aPosition;
-attribute vec3 aNormal;
-attribute vec2 aUV;
-
-uniform mat4 uProjection;
-uniform mat4 uView;
-uniform mat4 uModel;
-
-varying vec3 vWorldPosition;
-varying vec3 vNormal;
-varying vec2 vUV;
-
-void main() {
-    vec4 world = uModel * vec4(aPosition, 1.0);
-
-    vWorldPosition = world.xyz;
-    vNormal = mat3(uModel) * aNormal;
-    vUV = aUV;
-
-    gl_Position = uProjection * uView * world;
-}
-`;
-
-const fragmentShaderSource = `
-precision highp float;
-
-varying vec3 vWorldPosition;
-varying vec3 vNormal;
-varying vec2 vUV;
-
-uniform vec3 uCameraPosition;
-
-uniform vec3 uLightPosition;
-uniform vec3 uLightColor;
-
-uniform float uFogNear;
-uniform float uFogFar;
-
-uniform float uTime;
-uniform float uWorldDisturbance;
-
-float hash(vec3 p) {
-    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
-    p *= 17.0;
-    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
-
-float noise(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-
-    f = f * f * (3.0 - 2.0 * f);
-
-    float n000 = hash(i + vec3(0,0,0));
-    float n100 = hash(i + vec3(1,0,0));
-    float n010 = hash(i + vec3(0,1,0));
-    float n110 = hash(i + vec3(1,1,0));
-    float n001 = hash(i + vec3(0,0,1));
-    float n101 = hash(i + vec3(1,0,1));
-    float n011 = hash(i + vec3(0,1,1));
-    float n111 = hash(i + vec3(1,1,1));
-
-    return mix(
-        mix(
-            mix(n000, n100, f.x),
-            mix(n010, n110, f.x),
-            f.y
-        ),
-        mix(
-            mix(n001, n101, f.x),
-            mix(n011, n111, f.x),
-            f.y
-        ),
-        f.z
-    );
-}
-
-void main() {
-
-    vec3 normal = normalize(vNormal);
-
-    vec3 toLight = uLightPosition - vWorldPosition;
-    float lightDistance = length(toLight);
-
-    vec3 lightDir = normalize(toLight);
-
-    float diffuse = max(dot(normal, lightDir), 0.0);
-
-    float attenuation =
-        1.0 /
-        (1.0 +
-        lightDistance * 0.055 +
-        lightDistance * lightDistance * 0.004);
-
-    float flashlight = diffuse * attenuation;
-
-    vec3 base;
-
-    float groundNoise =
-        noise(vWorldPosition * 0.18) * 0.65 +
-        noise(vWorldPosition * 0.7) * 0.35;
-
-    if (normal.y > 0.45) {
-        base = mix(
-            vec3(0.045, 0.060, 0.047),
-            vec3(0.095, 0.115, 0.085),
-            groundNoise
-        );
-    } else {
-        base = mix(
-            vec3(0.035, 0.027, 0.022),
-            vec3(0.075, 0.050, 0.032),
-            groundNoise
-        );
-    }
-
-    float trunkVariation = noise(vWorldPosition * 0.35);
-
-    if (normal.y < 0.55) {
-        base *= mix(0.55, 1.15, trunkVariation);
-    }
-
-    vec3 ambient = vec3(0.055, 0.075, 0.068);
-
-    /*
-       Very slight world-state-dependent lighting distortion.
-       It is intentionally subtle.
-    */
-    float disturbanceLight =
-        sin(uTime * 0.21 + vWorldPosition.x * 0.08) *
-        0.008 *
-        uWorldDisturbance;
-
-    vec3 color =
-        base * ambient +
-        base * uLightColor * flashlight * 2.0;
-
-    color += disturbanceLight;
-
-    /*
-       Fog.
-       Distance is deliberately quite short.
-    */
-    float distanceFromCamera =
-        length(vWorldPosition - uCameraPosition);
-
-    float fog =
-        smoothstep(
-            uFogNear,
-            uFogFar,
-            distanceFromCamera
-        );
-
-    /*
-       Slightly non-uniform fog.
-       It prevents the scene from looking like a simple
-       linear atmospheric effect.
-    */
-    float fogNoise =
-        noise(
-            vWorldPosition * 0.025 +
-            vec3(0.0, uTime * 0.006, 0.0)
-        );
-
-    fog += (fogNoise - 0.5) * 0.11;
-    fog = clamp(fog, 0.0, 1.0);
-
-    vec3 fogColor =
-        vec3(0.018, 0.027, 0.025);
-
-    color = mix(color, fogColor, fog);
-
-    /*
-       Extremely subtle distance darkening.
-    */
-    float darkness =
-        smoothstep(15.0, 55.0, distanceFromCamera);
-
-    color *= mix(1.0, 0.72, darkness);
-
-    gl_FragColor = vec4(color, 1.0);
-}
-`;
-
-/* ============================================================
-   SHADER COMPILATION
-   ============================================================ */
-
-function compileShader(type, source) {
-    const shader = gl.createShader(type);
-
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(shader));
-        throw new Error("Shader compilation failed");
-    }
-
-    return shader;
-}
-
-const vertexShader =
-    compileShader(gl.VERTEX_SHADER, vertexShaderSource);
-
-const fragmentShader =
-    compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
-
-const program = gl.createProgram();
-
-gl.attachShader(program, vertexShader);
-gl.attachShader(program, fragmentShader);
-
-gl.linkProgram(program);
-
-if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    throw new Error(gl.getProgramInfoLog(program));
-}
-
-gl.useProgram(program);
-
-/* ============================================================
-   ATTRIBUTES / UNIFORMS
-   ============================================================ */
-
-const aPosition =
-    gl.getAttribLocation(program, "aPosition");
-
-const aNormal =
-    gl.getAttribLocation(program, "aNormal");
-
-const aUV =
-    gl.getAttribLocation(program, "aUV");
-
-const uProjection =
-    gl.getUniformLocation(program, "uProjection");
-
-const uView =
-    gl.getUniformLocation(program, "uView");
-
-const uModel =
-    gl.getUniformLocation(program, "uModel");
-
-const uCameraPosition =
-    gl.getUniformLocation(program, "uCameraPosition");
-
-const uLightPosition =
-    gl.getUniformLocation(program, "uLightPosition");
-
-const uLightColor =
-    gl.getUniformLocation(program, "uLightColor");
-
-const uFogNear =
-    gl.getUniformLocation(program, "uFogNear");
-
-const uFogFar =
-    gl.getUniformLocation(program, "uFogFar");
-
-const uTime =
-    gl.getUniformLocation(program, "uTime");
-
-const uWorldDisturbance =
-    gl.getUniformLocation(program, "uWorldDisturbance");
-
-/* ============================================================
-   MATRIX FUNCTIONS
-   ============================================================ */
-
-function identity() {
-    return [
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        0,0,0,1
-    ];
-}
-
-function multiply(a, b) {
-    const out = new Array(16);
-
-    for (let row = 0; row < 4; row++) {
-        for (let col = 0; col < 4; col++) {
-            out[col * 4 + row] =
-                a[0 * 4 + row] * b[col * 4 + 0] +
-                a[1 * 4 + row] * b[col * 4 + 1] +
-                a[2 * 4 + row] * b[col * 4 + 2] +
-                a[3 * 4 + row] * b[col * 4 + 3];
-        }
-    }
-
-    return out;
-}
-
-function translation(x, y, z) {
-    return [
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        x,y,z,1
-    ];
-}
-
-function scale(x, y, z) {
-    return [
-        x,0,0,0,
-        0,y,0,0,
-        0,0,z,0,
-        0,0,0,1
-    ];
-}
-
-function rotationY(a) {
-    const c = Math.cos(a);
-    const s = Math.sin(a);
-
-    return [
-         c,0,-s,0,
-         0,1, 0,0,
-         s,0, c,0,
-         0,0, 0,1
-    ];
-}
-
-function rotationX(a) {
-    const c = Math.cos(a);
-    const s = Math.sin(a);
-
-    return [
-        1, 0, 0, 0,
-        0, c, s, 0,
-        0,-s, c, 0,
-        0, 0, 0, 1
-    ];
-}
-
-function perspective(fov, aspect, near, far) {
-    const f = 1 / Math.tan(fov / 2);
-    const nf = 1 / (near - far);
-
-    return [
-        f / aspect,0,0,0,
-        0,f,0,0,
-        0,0,(far + near) * nf,-1,
-        0,0,(2 * far * near) * nf,0
-    ];
-}
-
-function lookAt(position, target, up) {
-
-    let zx = position[0] - target[0];
-    let zy = position[1] - target[1];
-    let zz = position[2] - target[2];
-
-    let len = Math.hypot(zx, zy, zz);
-
-    zx /= len;
-    zy /= len;
-    zz /= len;
-
-    let xx =
-        up[1] * zz -
-        up[2] * zy;
-
-    let xy =
-        up[2] * zx -
-        up[0] * zz;
-
-    let xz =
-        up[0] * zy -
-        up[1] * zx;
-
-    len = Math.hypot(xx, xy, xz);
-
-    xx /= len;
-    xy /= len;
-    xz /= len;
-
-    const yx =
-        zy * xz -
-        zz * xy;
-
-    const yy =
-        zz * xx -
-        zx * xz;
-
-    const yz =
-        zx * xy -
-        zy * xx;
-
-    return [
-        xx,yx,zx,0,
-        xy,yy,zy,0,
-        xz,yz,zz,0,
-
-        -(xx * position[0] +
-          xy * position[1] +
-          xz * position[2]),
-
-        -(yx * position[0] +
-          yy * position[1] +
-          yz * position[2]),
-
-        -(zx * position[0] +
-          zy * position[1] +
-          zz * position[2]),
-
-        1
-    ];
-}
-
-/* ============================================================
-   GEOMETRY
-   ============================================================ */
-
-function createMesh(vertices, indices) {
-
-    const vertexBuffer = gl.createBuffer();
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-    gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array(vertices),
-        gl.STATIC_DRAW
+const scene =
+    new THREE.Scene();
+
+scene.background =
+    new THREE.Color(0x050807);
+
+scene.fog =
+    new THREE.FogExp2(
+        0x07100c,
+        0.008
     );
 
-    const indexBuffer = gl.createBuffer();
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+/* ============================================================
+   CAMERA
+   ============================================================ */
 
-    gl.bufferData(
-        gl.ELEMENT_ARRAY_BUFFER,
-        new Uint16Array(indices),
-        gl.STATIC_DRAW
+const camera =
+    new THREE.PerspectiveCamera(
+        68,
+        window.innerWidth /
+        window.innerHeight,
+        0.05,
+        1000
     );
 
-    return {
-        vertexBuffer,
-        indexBuffer,
-        count: indices.length
+camera.position.set(
+    0,
+    3,
+    8
+);
+
+
+/* ============================================================
+   LIGHTING
+   ============================================================ */
+
+const hemi =
+    new THREE.HemisphereLight(
+        0x9eb6ad,
+        0x101512,
+        1.8
+    );
+
+scene.add(hemi);
+
+const sun =
+    new THREE.DirectionalLight(
+        0xd5e6dd,
+        2.4
+    );
+
+sun.position.set(
+    80,
+    130,
+    40
+);
+
+sun.castShadow = true;
+
+sun.shadow.mapSize.set(
+    2048,
+    2048
+);
+
+sun.shadow.camera.left = -160;
+sun.shadow.camera.right = 160;
+sun.shadow.camera.top = 160;
+sun.shadow.camera.bottom = -160;
+
+scene.add(sun);
+
+
+/* ============================================================
+   PLAYER LIGHT
+   ============================================================ */
+
+const playerLight =
+    new THREE.PointLight(
+        0xb8ffda,
+        8,
+        28,
+        2
+    );
+
+playerLight.position.set(
+    0,
+    3,
+    0
+);
+
+scene.add(playerLight);
+
+
+/* ============================================================
+   WORLD ROOT
+   ============================================================ */
+
+const worldRoot =
+    new THREE.Group();
+
+scene.add(worldRoot);
+
+
+/* ============================================================
+   PERSISTENCE
+   ============================================================ */
+
+const STORAGE =
+    "room01_metaverse_state";
+
+let persistent;
+
+try {
+
+    persistent =
+        JSON.parse(
+            localStorage.getItem(
+                STORAGE
+            )
+        ) || null;
+
+} catch {
+
+    persistent = null;
+}
+
+if (!persistent) {
+
+    persistent = {
+
+        discovered: [],
+
+        worldsVisited: [],
+
+        objectsUsed: [],
+
+        seed:
+            Math.floor(
+                Math.random() *
+                99999999
+            )
     };
 }
 
-/*
-    Vertex:
-    position xyz
-    normal xyz
-    uv xy
-*/
+function saveState() {
 
-function createCube() {
-
-    const v = [
-        // front
-        -0.5,-0.5, 0.5,  0,0,1,  0,0,
-         0.5,-0.5, 0.5,  0,0,1,  1,0,
-         0.5, 0.5, 0.5,  0,0,1,  1,1,
-        -0.5, 0.5, 0.5,  0,0,1,  0,1,
-
-        // back
-         0.5,-0.5,-0.5,  0,0,-1,  0,0,
-        -0.5,-0.5,-0.5,  0,0,-1,  1,0,
-        -0.5, 0.5,-0.5,  0,0,-1,  1,1,
-         0.5, 0.5,-0.5,  0,0,-1,  0,1,
-
-        // left
-        -0.5,-0.5,-0.5, -1,0,0, 0,0,
-        -0.5,-0.5, 0.5, -1,0,0, 1,0,
-        -0.5, 0.5, 0.5, -1,0,0, 1,1,
-        -0.5, 0.5,-0.5, -1,0,0, 0,1,
-
-        // right
-         0.5,-0.5, 0.5, 1,0,0, 0,0,
-         0.5,-0.5,-0.5, 1,0,0, 1,0,
-         0.5, 0.5,-0.5, 1,0,0, 1,1,
-         0.5, 0.5, 0.5, 1,0,0, 0,1,
-
-        // top
-        -0.5,0.5, 0.5, 0,1,0, 0,0,
-         0.5,0.5, 0.5, 0,1,0, 1,0,
-         0.5,0.5,-0.5, 0,1,0, 1,1,
-        -0.5,0.5,-0.5, 0,1,0, 0,1,
-
-        // bottom
-        -0.5,-0.5,-0.5, 0,-1,0, 0,0,
-         0.5,-0.5,-0.5, 0,-1,0, 1,0,
-         0.5,-0.5, 0.5, 0,-1,0, 1,1,
-        -0.5,-0.5, 0.5, 0,-1,0, 0,1
-    ];
-
-    const i = [];
-
-    for (let f = 0; f < 6; f++) {
-        const n = f * 4;
-
-        i.push(
-            n, n + 1, n + 2,
-            n, n + 2, n + 3
-        );
-    }
-
-    return createMesh(v, i);
-}
-
-const cubeMesh = createCube();
-
-/* ============================================================
-   RANDOM / NOISE
-   ============================================================ */
-
-function hash2(x, z) {
-
-    const s =
-        Math.sin(
-            x * 127.1 +
-            z * 311.7 +
-            17.31
-        ) * 43758.5453123;
-
-    return s - Math.floor(s);
-}
-
-function smoothNoise(x, z) {
-
-    const ix = Math.floor(x);
-    const iz = Math.floor(z);
-
-    const fx = x - ix;
-    const fz = z - iz;
-
-    const sx =
-        fx * fx * (3 - 2 * fx);
-
-    const sz =
-        fz * fz * (3 - 2 * fz);
-
-    const a = hash2(ix, iz);
-    const b = hash2(ix + 1, iz);
-    const c = hash2(ix, iz + 1);
-    const d = hash2(ix + 1, iz + 1);
-
-    return (
-        a * (1 - sx) * (1 - sz) +
-        b * sx * (1 - sz) +
-        c * (1 - sx) * sz +
-        d * sx * sz
+    localStorage.setItem(
+        STORAGE,
+        JSON.stringify(
+            persistent
+        )
     );
 }
+
+
+/* ============================================================
+   WORLD DEFINITIONS
+   ============================================================ */
+
+const WORLD_DEFINITIONS = {
+
+    HOME: {
+
+        code: "W-01",
+
+        title: "HOME",
+
+        location: "CENTRAL",
+
+        fog: 0.006,
+
+        sky: 0x07100d,
+
+        ground: 0x171e1a,
+
+        accent: 0x9effc9
+    },
+
+    VERDANT: {
+
+        code: "W-02",
+
+        title: "VERDANT",
+
+        location: "NORTH FOREST",
+
+        fog: 0.018,
+
+        sky: 0x08100c,
+
+        ground: 0x111b13,
+
+        accent: 0x9bd6a8
+    },
+
+    NULL: {
+
+        code: "W-03",
+
+        title: "NULL",
+
+        location: "UNDEFINED",
+
+        fog: 0.012,
+
+        sky: 0x07080b,
+
+        ground: 0x111116,
+
+        accent: 0xb3b7ff
+    }
+};
+
+let currentWorld =
+    "HOME";
+
+
+/* ============================================================
+   MATERIAL FACTORY
+   ============================================================ */
+
+function mat(
+    color,
+    roughness = 0.8,
+    metalness = 0
+) {
+
+    return new THREE.MeshStandardMaterial({
+
+        color,
+
+        roughness,
+
+        metalness
+    });
+}
+
+
+/* ============================================================
+   WORLD CLEAR
+   ============================================================ */
+
+function clearWorld() {
+
+    while (
+        worldRoot.children.length
+    ) {
+
+        const object =
+            worldRoot.children.pop();
+
+        object.traverse(child => {
+
+            if (child.geometry) {
+
+                child.geometry.dispose();
+            }
+
+            if (child.material) {
+
+                if (
+                    Array.isArray(
+                        child.material
+                    )
+                ) {
+
+                    child.material
+                        .forEach(
+                            m => m.dispose()
+                        );
+
+                } else {
+
+                    child.material.dispose();
+                }
+            }
+        });
+    }
+}
+
+
+/* ============================================================
+   PROCEDURAL RANDOM
+   ============================================================ */
+
+function random(seed) {
+
+    const x =
+        Math.sin(
+            seed * 12.9898 +
+            persistent.seed * 0.00013
+        ) *
+        43758.5453123;
+
+    return x -
+        Math.floor(x);
+}
+
+
+/* ============================================================
+   TERRAIN
+   ============================================================ */
 
 function terrainHeight(x, z) {
 
-    const large =
-        smoothNoise(x * 0.018, z * 0.018);
+    if (
+        currentWorld ===
+        "NULL"
+    ) {
 
-    const medium =
-        smoothNoise(x * 0.055, z * 0.055);
-
-    const small =
-        smoothNoise(x * 0.16, z * 0.16);
-
-    let h =
-        (large - 0.5) * 3.0 +
-        (medium - 0.5) * 0.9 +
-        (small - 0.5) * 0.22;
-
-    /*
-       Keep the central walking route comparatively
-       navigable while leaving the forest uneven.
-    */
-    const distanceFromPath =
-        Math.abs(x - pathX(z));
-
-    if (distanceFromPath < 3.0) {
-        h *= distanceFromPath / 3.0;
+        return (
+            Math.sin(x * 0.035) * 2 +
+            Math.cos(z * 0.025) * 1.4
+        );
     }
 
-    return h;
-}
+    const a =
+        Math.sin(
+            x * 0.018 +
+            z * 0.011
+        );
 
-function pathX(z) {
+    const b =
+        Math.sin(
+            z * 0.037
+        );
+
+    const c =
+        Math.cos(
+            x * 0.052
+        );
 
     return (
-        Math.sin(z * 0.018) * 5.5 +
-        Math.sin(z * 0.047) * 1.8
+        a * 1.6 +
+        b * 0.7 +
+        c * 0.35
     );
 }
 
+
 /* ============================================================
-   WORLD STATE
+   TERRAIN MESH
    ============================================================ */
 
-const STORAGE_KEY = "room01_forest_state_v1";
+function createTerrain() {
 
-let savedState;
+    const size = 360;
 
-try {
-    savedState =
-        JSON.parse(
-            localStorage.getItem(STORAGE_KEY) || "null"
+    const segments = 100;
+
+    const geometry =
+        new THREE.PlaneGeometry(
+            size,
+            size,
+            segments,
+            segments
         );
-} catch {
-    savedState = null;
+
+    const position =
+        geometry.attributes.position;
+
+    for (
+        let i = 0;
+        i < position.count;
+        i++
+    ) {
+
+        const x =
+            position.getX(i);
+
+        const z =
+            -position.getY(i);
+
+        position.setZ(
+            i,
+            terrainHeight(x, z)
+        );
+    }
+
+    geometry.computeVertexNormals();
+
+    const material =
+        mat(
+            WORLD_DEFINITIONS[
+                currentWorld
+            ].ground,
+            1
+        );
+
+    const mesh =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    mesh.rotation.x =
+        -Math.PI / 2;
+
+    mesh.receiveShadow = true;
+
+    worldRoot.add(mesh);
 }
 
-if (!savedState) {
-    savedState = {
-        executionCount: 0,
-        anomaliesSeen: [],
-        landmarks: {},
-        seed: Math.floor(Math.random() * 99999999)
-    };
+
+/* ============================================================
+   GRASS
+   ============================================================ */
+
+function createGrass() {
+
+    if (
+        currentWorld ===
+        "NULL"
+    ) return;
+
+    const count =
+        currentWorld ===
+        "VERDANT"
+            ? 7000
+            : 3000;
+
+    const geometry =
+        new THREE.BufferGeometry();
+
+    const positions =
+        new Float32Array(
+            count * 3
+        );
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        const x =
+            (random(i * 1.31) - .5) *
+            330;
+
+        const z =
+            (random(i * 2.71) - .5) *
+            330;
+
+        positions[i * 3] =
+            x;
+
+        positions[i * 3 + 1] =
+            terrainHeight(x, z);
+
+        positions[i * 3 + 2] =
+            z;
+    }
+
+    geometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(
+            positions,
+            3
+        )
+    );
+
+    const material =
+        new THREE.PointsMaterial({
+
+            color:
+                currentWorld ===
+                "VERDANT"
+                    ? 0x759a79
+                    : 0x66736b,
+
+            size:
+                currentWorld ===
+                "VERDANT"
+                    ? 0.14
+                    : 0.1,
+
+            transparent: true,
+
+            opacity: .75
+        });
+
+    const grass =
+        new THREE.Points(
+            geometry,
+            material
+        );
+
+    worldRoot.add(grass);
 }
 
-savedState.executionCount++;
 
-localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(savedState)
-);
+/* ============================================================
+   TREES
+   ============================================================ */
 
-/*
-   The forest has a persistent identity.
-*/
-const WORLD_SEED = savedState.seed;
+function createTree(
+    x,
+    z,
+    scale = 1
+) {
+
+    const group =
+        new THREE.Group();
+
+    const y =
+        terrainHeight(x, z);
+
+    const trunk =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                .25 * scale,
+                .42 * scale,
+                5 * scale,
+                7
+            ),
+            mat(0x30251d)
+        );
+
+    trunk.position.y =
+        y + 2.5 * scale;
+
+    trunk.castShadow = true;
+
+    group.add(trunk);
+
+    const crownMaterial =
+        mat(
+            currentWorld ===
+            "VERDANT"
+                ? 0x263d2b
+                : 0x29352f
+        );
+
+    const crown =
+        new THREE.Mesh(
+            new THREE.DodecahedronGeometry(
+                2.3 * scale,
+                1
+            ),
+            crownMaterial
+        );
+
+    crown.position.y =
+        y + 5.1 * scale;
+
+    crown.castShadow = true;
+
+    group.add(crown);
+
+    group.position.x = x;
+    group.position.z = z;
+
+    worldRoot.add(group);
+
+    return group;
+}
+
+function createForest() {
+
+    const count =
+        currentWorld ===
+        "VERDANT"
+            ? 500
+            : 180;
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        const angle =
+            random(i * 7.1) *
+            Math.PI *
+            2;
+
+        const radius =
+            25 +
+            random(i * 9.7) *
+            145;
+
+        const x =
+            Math.cos(angle) *
+            radius;
+
+        const z =
+            Math.sin(angle) *
+            radius;
+
+        /*
+           Keep central area open.
+        */
+        if (
+            Math.hypot(x, z) <
+            18
+        ) {
+            continue;
+        }
+
+        createTree(
+            x,
+            z,
+            .65 +
+            random(i * 12.4) *
+            1.25
+        );
+    }
+}
+
+
+/* ============================================================
+   BUILDING
+   ============================================================ */
+
+function createBuilding(
+    x,
+    z,
+    w,
+    h,
+    d,
+    color
+) {
+
+    const group =
+        new THREE.Group();
+
+    const body =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                w,
+                h,
+                d
+            ),
+            mat(
+                color,
+                .7,
+                .1
+            )
+        );
+
+    body.position.y =
+        terrainHeight(x, z) +
+        h / 2;
+
+    body.castShadow = true;
+    body.receiveShadow = true;
+
+    group.add(body);
+
+    /*
+       Roof
+    */
+
+    const roof =
+        new THREE.Mesh(
+            new THREE.ConeGeometry(
+                Math.max(w,d) *
+                .72,
+                h * .45,
+                4
+            ),
+            mat(
+                0x121714,
+                .9
+            )
+        );
+
+    roof.position.y =
+        terrainHeight(x, z) +
+        h +
+        h * .2;
+
+    roof.rotation.y =
+        Math.PI / 4;
+
+    roof.castShadow = true;
+
+    group.add(roof);
+
+    group.position.x = x;
+    group.position.z = z;
+
+    worldRoot.add(group);
+
+    return group;
+}
+
+
+/* ============================================================
+   HOME
+   ============================================================ */
+
+function buildHome() {
+
+    /*
+       Central plaza.
+    */
+
+    const plaza =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                16,
+                16,
+                .35,
+                64
+            ),
+            mat(
+                0x242b27,
+                .85
+            )
+        );
+
+    plaza.position.y =
+        terrainHeight(0, 0) +
+        .15;
+
+    plaza.receiveShadow = true;
+
+    worldRoot.add(plaza);
+
+    /*
+       Four buildings.
+    */
+
+    createBuilding(
+        -22,
+        -18,
+        9,
+        7,
+        9,
+        0x28312c
+    );
+
+    createBuilding(
+        22,
+        -18,
+        8,
+        10,
+        8,
+        0x222b27
+    );
+
+    createBuilding(
+        -22,
+        18,
+        11,
+        6,
+        8,
+        0x303934
+    );
+
+    createBuilding(
+        23,
+        19,
+        7,
+        12,
+        7,
+        0x202824
+    );
+
+    /*
+       Central monolith.
+    */
+
+    createMonolith(
+        0,
+        0,
+        3.5
+    );
+
+    /*
+       World portals.
+    */
+
+    createPortal(
+        -9,
+        0,
+        "VERDANT",
+        0xff7b4d
+    );
+
+    createPortal(
+        9,
+        0,
+        "NULL",
+        0x8b82ff
+    );
+}
+
+
+/* ============================================================
+   MONOLITH
+   ============================================================ */
+
+function createMonolith(
+    x,
+    z,
+    scale = 1
+) {
+
+    const group =
+        new THREE.Group();
+
+    const body =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                scale,
+                scale * 5,
+                scale
+            ),
+            mat(
+                0x171d1a,
+                .25,
+                .8
+            )
+        );
+
+    body.position.y =
+        terrainHeight(x, z) +
+        scale * 2.5;
+
+    body.castShadow = true;
+
+    group.add(body);
+
+    /*
+       Thin emissive core.
+    */
+
+    const core =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                scale * .15,
+                scale * 4.2,
+                scale * .15
+            ),
+            new THREE.MeshBasicMaterial({
+                color:
+                    WORLD_DEFINITIONS[
+                        currentWorld
+                    ].accent
+            })
+        );
+
+    core.position.y =
+        terrainHeight(x, z) +
+        scale * 2.5;
+
+    group.add(core);
+
+    group.position.x = x;
+    group.position.z = z;
+
+    worldRoot.add(group);
+
+    return group;
+}
+
+
+/* ============================================================
+   PORTAL
+   ============================================================ */
+
+const portalObjects = [];
+
+function createPortal(
+    x,
+    z,
+    destination,
+    color
+) {
+
+    const group =
+        new THREE.Group();
+
+    const frameMaterial =
+        new THREE.MeshStandardMaterial({
+
+            color: 0x111613,
+
+            metalness: .85,
+
+            roughness: .22
+        });
+
+    const frame =
+        new THREE.Mesh(
+            new THREE.TorusGeometry(
+                4,
+                .28,
+                12,
+                64
+            ),
+            frameMaterial
+        );
+
+    frame.rotation.x =
+        Math.PI / 2;
+
+    frame.position.y =
+        terrainHeight(x, z) +
+        4;
+
+    group.add(frame);
+
+    const ringMaterial =
+        new THREE.MeshBasicMaterial({
+
+            color,
+
+            transparent: true,
+
+            opacity: .65
+        });
+
+    const ring =
+        new THREE.Mesh(
+            new THREE.TorusGeometry(
+                3.5,
+                .08,
+                8,
+                64
+            ),
+            ringMaterial
+        );
+
+    ring.rotation.x =
+        Math.PI / 2;
+
+    ring.position.y =
+        terrainHeight(x, z) +
+        4;
+
+    group.add(ring);
+
+    const light =
+        new THREE.PointLight(
+            color,
+            4,
+            18
+        );
+
+    light.position.y =
+        terrainHeight(x, z) +
+        3;
+
+    group.add(light);
+
+    group.position.x = x;
+    group.position.z = z;
+
+    worldRoot.add(group);
+
+    portalObjects.push({
+
+        object: group,
+
+        destination,
+
+        ring
+    });
+}
+
+
+/* ============================================================
+   VERDANT
+   ============================================================ */
+
+function buildVerdant() {
+
+    createForest();
+
+    /*
+       Lake.
+    */
+
+    const lake =
+        new THREE.Mesh(
+            new THREE.CircleGeometry(
+                28,
+                64
+            ),
+            new THREE.MeshPhysicalMaterial({
+
+                color: 0x162d2b,
+
+                roughness: .08,
+
+                metalness: .1,
+
+                transmission: .15,
+
+                transparent: true,
+
+                opacity: .92
+            })
+        );
+
+    lake.rotation.x =
+        -Math.PI / 2;
+
+    lake.position.set(
+        35,
+        terrainHeight(35, 0) + .12,
+        0
+    );
+
+    worldRoot.add(lake);
+
+    /*
+       Ruins.
+    */
+
+    createRuin(
+        -30,
+        -45
+    );
+
+    createRuin(
+        55,
+        55
+    );
+
+    createRuin(
+        -65,
+        70
+    );
+
+    /*
+       Return portal.
+    */
+
+    createPortal(
+        0,
+        0,
+        "HOME",
+        0x9effc9
+    );
+
+    /*
+       Hidden second portal.
+    */
+
+    createPortal(
+        75,
+        -70,
+        "NULL",
+        0x8b82ff
+    );
+}
+
+
+/* ============================================================
+   RUINS
+   ============================================================ */
+
+function createRuin(x, z) {
+
+    const y =
+        terrainHeight(x, z);
+
+    const group =
+        new THREE.Group();
+
+    for (
+        let i = 0;
+        i < 4;
+        i++
+    ) {
+
+        const h =
+            4 +
+            random(
+                x * 2 +
+                z * 3 +
+                i
+            ) *
+            7;
+
+        const column =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    1.3,
+                    h,
+                    1.3
+                ),
+                mat(
+                    0x343a35,
+                    .95
+                )
+            );
+
+        const angle =
+            i *
+            Math.PI /
+            2;
+
+        column.position.set(
+
+            Math.cos(angle) * 5,
+
+            y +
+            h / 2,
+
+            Math.sin(angle) * 5
+        );
+
+        column.rotation.y =
+            random(i * 12.1) * .4;
+
+        column.castShadow = true;
+
+        group.add(column);
+    }
+
+    group.position.set(
+        x,
+        0,
+        z
+    );
+
+    worldRoot.add(group);
+}
+
+
+/* ============================================================
+   NULL
+   ============================================================ */
+
+function buildNull() {
+
+    scene.fog =
+        new THREE.FogExp2(
+            0x05050b,
+            .010
+        );
+
+    /*
+       Floating structures.
+    */
+
+    for (
+        let i = 0;
+        i < 26;
+        i++
+    ) {
+
+        const angle =
+            random(i * 3.14) *
+            Math.PI * 2;
+
+        const radius =
+            15 +
+            random(i * 8.17) *
+            85;
+
+        const x =
+            Math.cos(angle) *
+            radius;
+
+        const z =
+            Math.sin(angle) *
+            radius;
+
+        const size =
+            2 +
+            random(i * 9.8) *
+            7;
+
+        const cube =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    size,
+                    size,
+                    size
+                ),
+                mat(
+                    0x171923,
+                    .3,
+                    .8
+                )
+            );
+
+        cube.position.set(
+            x,
+            5 +
+            random(i * 4.2) * 24,
+            z
+        );
+
+        cube.rotation.set(
+            random(i) * 2,
+            random(i * 2) * 2,
+            random(i * 3) * 2
+        );
+
+        cube.castShadow = true;
+
+        worldRoot.add(cube);
+    }
+
+    /*
+       Giant central void object.
+    */
+
+    const geometry =
+        new THREE.TorusKnotGeometry(
+            12,
+            1.2,
+            180,
+            24
+        );
+
+    const material =
+        new THREE.MeshStandardMaterial({
+
+            color: 0x151a2d,
+
+            metalness: .9,
+
+            roughness: .16,
+
+            emissive: 0x222255,
+
+            emissiveIntensity: .8
+        });
+
+    const object =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    object.position.y =
+        14;
+
+    object.castShadow = true;
+
+    worldRoot.add(object);
+
+    /*
+       Portal back.
+    */
+
+    createPortal(
+        0,
+        0,
+        "HOME",
+        0x9effc9
+    );
+}
+
+
+/* ============================================================
+   WORLD BUILD
+   ============================================================ */
+
+function buildWorld(
+    worldName
+) {
+
+    currentWorld =
+        worldName;
+
+    clearWorld();
+
+    portalObjects.length = 0;
+
+    const definition =
+        WORLD_DEFINITIONS[
+            worldName
+        ];
+
+    scene.background =
+        new THREE.Color(
+            definition.sky
+        );
+
+    scene.fog =
+        new THREE.FogExp2(
+            definition.sky,
+            definition.fog
+        );
+
+    hemi.color.setHex(
+        worldName === "NULL"
+            ? 0x7777a0
+            : 0x9eb6ad
+    );
+
+    sun.color.setHex(
+        worldName === "NULL"
+            ? 0x8c8cb8
+            : 0xd5e6dd
+    );
+
+    sun.intensity =
+        worldName === "NULL"
+            ? 1.1
+            : 2.4;
+
+    createTerrain();
+
+    createGrass();
+
+    if (
+        worldName ===
+        "HOME"
+    ) {
+
+        buildHome();
+
+    } else if (
+        worldName ===
+        "VERDANT"
+    ) {
+
+        buildVerdant();
+
+    } else {
+
+        buildNull();
+    }
+
+    if (
+        !persistent.worldsVisited
+            .includes(worldName)
+    ) {
+
+        persistent.worldsVisited.push(
+            worldName
+        );
+
+        saveState();
+    }
+
+    updateWorldUI();
+}
+
+
+/* ============================================================
+   AVATAR
+   ============================================================ */
+
+const avatar =
+    new THREE.Group();
+
+scene.add(avatar);
+
+function buildAvatar() {
+
+    avatar.clear();
+
+    const bodyMaterial =
+        new THREE.MeshStandardMaterial({
+
+            color: 0x202725,
+
+            roughness: .65,
+
+            metalness: .2
+        });
+
+    const head =
+        new THREE.Mesh(
+            new THREE.IcosahedronGeometry(
+                .48,
+                2
+            ),
+            bodyMaterial
+        );
+
+    head.position.y =
+        2.8;
+
+    head.castShadow = true;
+
+    avatar.add(head);
+
+    const body =
+        new THREE.Mesh(
+            new THREE.CapsuleGeometry(
+                .62,
+                1.4,
+                5,
+                8
+            ),
+            bodyMaterial
+        );
+
+    body.position.y =
+        1.5;
+
+    body.castShadow = true;
+
+    avatar.add(body);
+
+    const leftArm =
+        createLimb(
+            -.78,
+            1.7
+        );
+
+    const rightArm =
+        createLimb(
+            .78,
+            1.7
+        );
+
+    avatar.add(
+        leftArm,
+        rightArm
+    );
+
+    const leftLeg =
+        createLimb(
+            -.3,
+            .55
+        );
+
+    const rightLeg =
+        createLimb(
+            .3,
+            .55
+        );
+
+    leftLeg.scale.y = 1.3;
+    rightLeg.scale.y = 1.3;
+
+    avatar.add(
+        leftLeg,
+        rightLeg
+    );
+}
+
+function createLimb(
+    x,
+    y
+) {
+
+    const mesh =
+        new THREE.Mesh(
+            new THREE.CapsuleGeometry(
+                .18,
+                .85,
+                4,
+                6
+            ),
+            mat(
+                0x252d29
+            )
+        );
+
+    mesh.position.set(
+        x,
+        y,
+        0
+    );
+
+    mesh.castShadow = true;
+
+    return mesh;
+}
+
+buildAvatar();
+
 
 /* ============================================================
    PLAYER
@@ -670,44 +1516,27 @@ const WORLD_SEED = savedState.seed;
 
 const player = {
 
-    position: [
-        pathX(0),
-        terrainHeight(pathX(0), 0) + 1.7,
-        0
-    ],
+    position:
+        new THREE.Vector3(
+            0,
+            0,
+            8
+        ),
+
+    velocity:
+        new THREE.Vector3(),
 
     yaw: Math.PI,
 
     pitch: 0,
 
-    speed: 4.1,
+    speed: 7,
 
-    walking: false,
+    thirdPerson: true,
 
-    distance: 0,
-
-    previousZ: 0,
-
-    previousX: 0,
-
-    stoppedFor: 0,
-
-    lookBacks: 0,
-
-    lastYaw: Math.PI,
-
-    headingChanges: 0,
-
-    offPathTime: 0,
-
-    revisits: 0,
-
-    landmarksSeen: new Set(),
-
-    lastLandmark: null,
-
-    time: 0
+    active: false
 };
+
 
 /* ============================================================
    INPUT
@@ -715,1702 +1544,800 @@ const player = {
 
 const keys = {};
 
-window.addEventListener("keydown", e => {
-    keys[e.code] = true;
+window.addEventListener(
+    "keydown",
+    event => {
 
-    if (
-        [
-            "KeyW",
-            "KeyA",
-            "KeyS",
-            "KeyD",
-            "ArrowUp",
-            "ArrowDown",
-            "ArrowLeft",
-            "ArrowRight",
-            "Space"
-        ].includes(e.code)
-    ) {
-        e.preventDefault();
+        keys[event.code] = true;
+
+        if (
+            event.code ===
+            "Tab"
+        ) {
+
+            event.preventDefault();
+
+            toggleWorldMenu();
+        }
+
+        if (
+            event.code ===
+            "KeyC"
+        ) {
+
+            player.thirdPerson =
+                !player.thirdPerson;
+        }
+
+        if (
+            event.code ===
+            "KeyE"
+        ) {
+
+            interact();
+        }
     }
-});
+);
 
-window.addEventListener("keyup", e => {
-    keys[e.code] = false;
-});
+window.addEventListener(
+    "keyup",
+    event => {
 
-let mouseLocked = false;
-
-canvas.addEventListener("click", () => {
-
-    canvas.requestPointerLock();
-
-    if (audioContext.state === "suspended") {
-        audioContext.resume();
+        keys[event.code] =
+            false;
     }
+);
 
-    document
-        .getElementById("clickToStart")
-        .classList.remove("visible");
-});
+let pointerLocked = false;
+
+canvas.addEventListener(
+    "click",
+    () => {
+
+        if (
+            !player.active
+        ) return;
+
+        canvas.requestPointerLock();
+    }
+);
 
 document.addEventListener(
     "pointerlockchange",
     () => {
-        mouseLocked =
-            document.pointerLockElement === canvas;
+
+        pointerLocked =
+            document.pointerLockElement ===
+            canvas;
     }
 );
 
 document.addEventListener(
     "mousemove",
-    e => {
+    event => {
 
-        if (!mouseLocked) return;
+        if (
+            !pointerLocked
+        ) return;
 
-        player.yaw -= e.movementX * 0.0022;
+        player.yaw -=
+            event.movementX *
+            .0022;
 
-        player.pitch -= e.movementY * 0.0018;
+        player.pitch -=
+            event.movementY *
+            .0018;
 
         player.pitch =
-            Math.max(
-                -1.15,
-                Math.min(1.15, player.pitch)
+            THREE.MathUtils.clamp(
+                player.pitch,
+                -1.2,
+                1.2
             );
     }
 );
 
-/* ============================================================
-   AUDIO
-   ============================================================ */
-
-const AudioContext =
-    window.AudioContext ||
-    window.webkitAudioContext;
-
-const audioContext =
-    new AudioContext();
-
-let windGain;
-let windFilter;
-
-function createAudio() {
-
-    const noiseBuffer =
-        audioContext.createBuffer(
-            1,
-            audioContext.sampleRate * 4,
-            audioContext.sampleRate
-        );
-
-    const data =
-        noiseBuffer.getChannelData(0);
-
-    for (let i = 0; i < data.length; i++) {
-        data[i] =
-            Math.random() * 2 - 1;
-    }
-
-    const source =
-        audioContext.createBufferSource();
-
-    source.buffer = noiseBuffer;
-    source.loop = true;
-
-    windFilter =
-        audioContext.createBiquadFilter();
-
-    windFilter.type = "lowpass";
-    windFilter.frequency.value = 650;
-
-    windGain =
-        audioContext.createGain();
-
-    windGain.gain.value = 0.028;
-
-    source
-        .connect(windFilter)
-        .connect(windGain)
-        .connect(audioContext.destination);
-
-    source.start();
-}
-
-createAudio();
-
-function playTone(
-    frequency,
-    duration,
-    volume,
-    type = "sine"
-) {
-
-    if (audioContext.state !== "running") {
-        return;
-    }
-
-    const oscillator =
-        audioContext.createOscillator();
-
-    const gain =
-        audioContext.createGain();
-
-    oscillator.type = type;
-
-    oscillator.frequency.value =
-        frequency;
-
-    gain.gain.setValueAtTime(
-        0.0001,
-        audioContext.currentTime
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        volume,
-        audioContext.currentTime + 0.03
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        audioContext.currentTime + duration
-    );
-
-    oscillator
-        .connect(gain)
-        .connect(audioContext.destination);
-
-    oscillator.start();
-
-    oscillator.stop(
-        audioContext.currentTime + duration + 0.05
-    );
-}
-
-function playFootstep() {
-
-    if (audioContext.state !== "running") {
-        return;
-    }
-
-    const duration = 0.08;
-
-    const buffer =
-        audioContext.createBuffer(
-            1,
-            Math.floor(
-                audioContext.sampleRate * duration
-            ),
-            audioContext.sampleRate
-        );
-
-    const data =
-        buffer.getChannelData(0);
-
-    for (let i = 0; i < data.length; i++) {
-
-        const t =
-            i / data.length;
-
-        data[i] =
-            (Math.random() * 2 - 1) *
-            Math.pow(1 - t, 4);
-    }
-
-    const source =
-        audioContext.createBufferSource();
-
-    const gain =
-        audioContext.createGain();
-
-    gain.gain.value = 0.055;
-
-    source.buffer = buffer;
-
-    source
-        .connect(gain)
-        .connect(audioContext.destination);
-
-    source.start();
-}
-
-let footstepTimer = 0;
 
 /* ============================================================
-   FOREST OBJECTS
+   MOVEMENT
    ============================================================ */
-
-const trees = [];
-const landmarks = [];
-const anomalies = [];
-
-function seededRandom(n) {
-
-    const x =
-        Math.sin(
-            n * 12.9898 +
-            WORLD_SEED * 0.0001
-        ) * 43758.5453;
-
-    return x - Math.floor(x);
-}
-
-function makeTree(x, z, scaleValue, rotation) {
-
-    return {
-        x,
-        z,
-        scale: scaleValue,
-        rotation,
-        variant: Math.floor(
-            seededRandom(
-                x * 12.1 +
-                z * 4.7
-            ) * 3
-        )
-    };
-}
-
-/*
-   Generate a long forest.
-*/
-for (let z = -180; z <= 500; z += 5) {
-
-    const center = pathX(z);
-
-    for (let side = -1; side <= 1; side += 2) {
-
-        const count =
-            2 +
-            Math.floor(
-                seededRandom(z * 0.31 + side * 7) * 3
-            );
-
-        for (let i = 0; i < count; i++) {
-
-            const distance =
-                5 +
-                seededRandom(
-                    z * 13 +
-                    i * 91 +
-                    side * 37
-                ) * 25;
-
-            const x =
-                center +
-                side * distance;
-
-            const treeZ =
-                z +
-                (seededRandom(
-                    z * 3.1 +
-                    i * 17 +
-                    side
-                ) - 0.5) * 4;
-
-            const scaleValue =
-                0.7 +
-                seededRandom(
-                    z * 4.7 +
-                    i * 8.1 +
-                    side * 2
-                ) * 1.7;
-
-            trees.push(
-                makeTree(
-                    x,
-                    treeZ,
-                    scaleValue,
-                    seededRandom(
-                        z + i * 9
-                    ) * TAU
-                )
-            );
-        }
-    }
-}
-
-/* ============================================================
-   LANDMARKS
-   ============================================================ */
-
-function addLandmark(id, z, type) {
-
-    landmarks.push({
-        id,
-        z,
-        type,
-        x: pathX(z),
-        discovered: false,
-        visits: 0
-    });
-}
-
-addLandmark("L01", 55, "stone");
-addLandmark("L02", 115, "dead_tree");
-addLandmark("L03", 185, "post");
-addLandmark("L04", 275, "stone");
-addLandmark("L05", 370, "structure");
-
-/* ============================================================
-   ANOMALY STATE
-   ============================================================ */
-
-const world = {
-
-    disturbance: 0,
-
-    lastEventDistance: 0,
-
-    lastEventTime: 0,
-
-    alteredTrees: new Map(),
-
-    missingTrees: new Set(),
-
-    impossibleLandmark: false,
-
-    distantFigure: null,
-
-    pathOffset: 0,
-
-    fogShift: 0,
-
-    soundEvents: [],
-
-    observedAnything: false
-};
-
-/* ============================================================
-   DISTANCE / PLAYER BEHAVIOUR
-   ============================================================ */
-
-function distanceFromPath() {
-
-    return Math.abs(
-        player.position[0] -
-        pathX(player.position[2])
-    );
-}
 
 function updatePlayer(dt) {
 
-    const oldX = player.position[0];
-    const oldZ = player.position[2];
+    if (
+        !player.active
+    ) return;
 
     let forward = 0;
-    let strafe = 0;
-
-    if (keys.KeyW || keys.ArrowUp) forward += 1;
-    if (keys.KeyS || keys.ArrowDown) forward -= 1;
-    if (keys.KeyA || keys.ArrowLeft) strafe -= 1;
-    if (keys.KeyD || keys.ArrowRight) strafe += 1;
-
-    player.walking =
-        forward !== 0 ||
-        strafe !== 0;
-
-    if (player.walking) {
-
-        const magnitude =
-            Math.hypot(forward, strafe);
-
-        forward /= magnitude;
-        strafe /= magnitude;
-
-        const cos =
-            Math.cos(player.yaw);
-
-        const sin =
-            Math.sin(player.yaw);
-
-        const dx =
-            (-sin * forward +
-             cos * strafe) *
-            player.speed *
-            dt;
-
-        const dz =
-            (-cos * forward -
-             sin * strafe) *
-            player.speed *
-            dt;
-
-        player.position[0] += dx;
-        player.position[2] += dz;
-    }
-
-    player.position[1] =
-        terrainHeight(
-            player.position[0],
-            player.position[2]
-        ) + 1.7;
-
-    const moved =
-        Math.hypot(
-            player.position[0] - oldX,
-            player.position[2] - oldZ
-        );
-
-    player.distance += moved;
-
-    if (!moved) {
-        player.stoppedFor += dt;
-    } else {
-        player.stoppedFor = 0;
-    }
-
-    if (distanceFromPath() > 8) {
-        player.offPathTime += dt;
-    }
-
-    const yawDelta =
-        Math.abs(
-            player.yaw -
-            player.lastYaw
-        );
-
-    if (yawDelta > 0.25) {
-        player.headingChanges++;
-    }
+    let right = 0;
 
     if (
-        Math.abs(
-            Math.sin(player.yaw) -
-            Math.sin(player.lastYaw)
-        ) > 1.7
-    ) {
-        player.lookBacks++;
-    }
-
-    player.lastYaw =
-        player.yaw;
+        keys.KeyW ||
+        keys.ArrowUp
+    ) forward++;
 
     if (
-        player.walking &&
-        moved > 0
-    ) {
-
-        footstepTimer -= dt;
-
-        if (footstepTimer <= 0) {
-
-            playFootstep();
-
-            footstepTimer =
-                0.42 +
-                Math.random() * 0.08;
-        }
-    }
-}
-
-/* ============================================================
-   LANDMARK DETECTION
-   ============================================================ */
-
-function updateLandmarks() {
-
-    for (const landmark of landmarks) {
-
-        const dx =
-            player.position[0] -
-            landmark.x;
-
-        const dz =
-            player.position[2] -
-            landmark.z;
-
-        const distance =
-            Math.hypot(dx, dz);
-
-        if (distance < 10) {
-
-            if (!landmark.discovered) {
-
-                landmark.discovered = true;
-                landmark.visits++;
-
-                player.landmarksSeen.add(
-                    landmark.id
-                );
-
-                savedState.landmarks[
-                    landmark.id
-                ] =
-                    (savedState.landmarks[
-                        landmark.id
-                    ] || 0) + 1;
-
-                localStorage.setItem(
-                    STORAGE_KEY,
-                    JSON.stringify(savedState)
-                );
-
-                world.disturbance += 0.14;
-
-            } else {
-
-                landmark.visits++;
-
-                /*
-                   Revisiting matters.
-                */
-                if (landmark.visits > 1) {
-
-                    player.revisits++;
-
-                    world.disturbance +=
-                        0.025;
-                }
-            }
-
-            landmark.lastDistance =
-                distance;
-        }
-    }
-}
-
-/* ============================================================
-   REACTIVE ANOMALY ENGINE
-   ============================================================ */
-
-function randomChance(probability) {
-    return Math.random() < probability;
-}
-
-function canTriggerEvent() {
-
-    const distanceSince =
-        player.distance -
-        world.lastEventDistance;
-
-    const timeSince =
-        player.time -
-        world.lastEventTime;
-
-    return (
-        distanceSince > 18 &&
-        timeSince > 12
-    );
-}
-
-function triggerAnomaly() {
-
-    if (!canTriggerEvent()) {
-        return;
-    }
-
-    /*
-       Probability is based on behaviour,
-       not elapsed time.
-    */
-
-    let probability = 0.015;
-
-    probability +=
-        Math.min(
-            player.revisits * 0.006,
-            0.08
-        );
-
-    probability +=
-        Math.min(
-            player.lookBacks * 0.002,
-            0.07
-        );
-
-    probability +=
-        Math.min(
-            player.offPathTime * 0.001,
-            0.08
-        );
-
-    probability +=
-        Math.min(
-            world.disturbance * 0.018,
-            0.10
-        );
+        keys.KeyS ||
+        keys.ArrowDown
+    ) forward--;
 
     if (
-        player.stoppedFor > 4
-    ) {
-        probability += 0.035;
-    }
-
-    if (!randomChance(probability)) {
-        return;
-    }
-
-    world.lastEventDistance =
-        player.distance;
-
-    world.lastEventTime =
-        player.time;
-
-    const roll =
-        Math.random();
-
-    if (roll < 0.20) {
-        alterNearbyTree();
-
-    } else if (roll < 0.38) {
-        moveLandmark();
-
-    } else if (roll < 0.53) {
-        createImpossibleTree();
-
-    } else if (roll < 0.67) {
-        triggerDistantSound();
-
-    } else if (roll < 0.80) {
-        createDistantPresence();
-
-    } else if (roll < 0.91) {
-        distortPath();
-
-    } else {
-        createHumanTrace();
-    }
-}
-
-/* ============================================================
-   TREE ANOMALIES
-   ============================================================ */
-
-function alterNearbyTree() {
-
-    let closest = null;
-    let closestDistance = Infinity;
-
-    for (const tree of trees) {
-
-        const dx =
-            tree.x -
-            player.position[0];
-
-        const dz =
-            tree.z -
-            player.position[2];
-
-        const d =
-            Math.hypot(dx, dz);
-
-        if (
-            d > 10 &&
-            d < 32 &&
-            d < closestDistance
-        ) {
-            closest = tree;
-            closestDistance = d;
-        }
-    }
-
-    if (!closest) return;
-
-    const key =
-        `${closest.x.toFixed(1)}:${closest.z.toFixed(1)}`;
-
-    world.alteredTrees.set(
-        key,
-        {
-            x: closest.x,
-            z: closest.z,
-            scale: closest.scale * 1.8,
-            rotation:
-                closest.rotation + Math.PI * 0.65
-        }
-    );
-
-    world.disturbance += 0.16;
-
-    savedState.anomaliesSeen.push(
-        "tree_" + key
-    );
-
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(savedState)
-    );
-}
-
-function createImpossibleTree() {
-
-    const angle =
-        player.yaw +
-        Math.PI +
-        (Math.random() - 0.5) * 0.5;
-
-    const distance =
-        18 +
-        Math.random() * 10;
-
-    const x =
-        player.position[0] +
-        Math.sin(angle) * distance;
-
-    const z =
-        player.position[2] -
-        Math.cos(angle) * distance;
-
-    const tree = makeTree(
-        x,
-        z,
-        3.0 + Math.random() * 1.5,
-        Math.random() * TAU
-    );
-
-    tree.impossible = true;
-
-    trees.push(tree);
-
-    world.disturbance += 0.12;
-}
-
-/* ============================================================
-   LANDMARK MUTATION
-   ============================================================ */
-
-function moveLandmark() {
-
-    if (!landmarks.length) return;
-
-    const landmark =
-        landmarks[
-            Math.floor(
-                Math.random() *
-                landmarks.length
-            )
-        ];
-
-    /*
-       It doesn't teleport dramatically.
-       It is simply no longer where the player remembers it.
-    */
-
-    landmark.z +=
-        (Math.random() > 0.5 ? 1 : -1) *
-        (14 + Math.random() * 28);
-
-    landmark.x =
-        pathX(landmark.z) +
-        (Math.random() - 0.5) * 2;
-
-    world.impossibleLandmark = true;
-
-    world.disturbance += 0.18;
-}
-
-/* ============================================================
-   PATH MUTATION
-   ============================================================ */
-
-function distortPath() {
-
-    world.pathOffset +=
-        (Math.random() - 0.5) * 5;
-
-    world.disturbance += 0.18;
-}
-
-/*
-   Replace normal path temporarily.
-*/
-function currentPathX(z) {
-
-    return (
-        pathX(z) +
-        world.pathOffset *
-        Math.exp(
-            -Math.abs(
-                z - player.position[2]
-            ) / 65
-        )
-    );
-}
-
-/* ============================================================
-   SOUNDS
-   ============================================================ */
-
-function triggerDistantSound() {
+        keys.KeyD ||
+        keys.ArrowRight
+    ) right++;
 
     if (
-        audioContext.state !== "running"
+        keys.KeyA ||
+        keys.ArrowLeft
+    ) right--;
+
+    const direction =
+        new THREE.Vector3();
+
+    if (
+        forward ||
+        right
     ) {
-        return;
-    }
 
-    /*
-       Deliberately not a monster sound.
-       A low, distant tonal event.
-    */
+        const length =
+            Math.hypot(
+                forward,
+                right
+            );
 
-    const frequency =
-        55 +
-        Math.random() * 35;
+        forward /= length;
+        right /= length;
 
-    playTone(
-        frequency,
-        2.5 +
-        Math.random() * 2,
-        0.018,
-        "sine"
-    );
+        direction.set(
+            Math.sin(
+                player.yaw
+            ) * forward +
+            Math.cos(
+                player.yaw
+            ) * right,
 
-    world.disturbance += 0.10;
-}
-
-/* ============================================================
-   DISTANT PRESENCE
-   ============================================================ */
-
-function createDistantPresence() {
-
-    const angle =
-        player.yaw +
-        Math.PI +
-        (Math.random() - 0.5) * 0.8;
-
-    const distance =
-        24 +
-        Math.random() * 15;
-
-    world.distantFigure = {
-
-        x:
-            player.position[0] +
-            Math.sin(angle) * distance,
-
-        z:
-            player.position[2] -
-            Math.cos(angle) * distance,
-
-        createdAt:
-            player.time,
-
-        lifetime:
-            4 +
-            Math.random() * 5
-    };
-
-    world.disturbance += 0.16;
-}
-
-/* ============================================================
-   HUMAN TRACE
-   ============================================================ */
-
-function createHumanTrace() {
-
-    /*
-       A small object near the path.
-       No explanation.
-    */
-
-    const z =
-        player.position[2] +
-        (Math.random() > 0.5 ? 1 : -1) *
-        (8 + Math.random() * 15);
-
-    const x =
-        currentPathX(z) +
-        (Math.random() - 0.5) * 3;
-
-    anomalies.push({
-        type: "trace",
-        x,
-        z,
-        createdAt: player.time,
-        scale: 0.6
-    });
-
-    world.disturbance += 0.11;
-}
-
-/* ============================================================
-   WORLD UPDATE
-   ============================================================ */
-
-function updateWorld(dt) {
-
-    player.time += dt;
-
-    updatePlayer(dt);
-
-    updateLandmarks();
-
-    /*
-       Slowly decay disturbance.
-       The world can become quiet again.
-    */
-    world.disturbance *=
-        Math.pow(0.985, dt * 60);
-
-    world.disturbance =
-        Math.max(
             0,
-            Math.min(
-                1,
-                world.disturbance
-            )
+
+            Math.cos(
+                player.yaw
+            ) * forward -
+            Math.sin(
+                player.yaw
+            ) * right
         );
 
-    triggerAnomaly();
-
-    if (
-        world.distantFigure &&
-        player.time -
-        world.distantFigure.createdAt >
-        world.distantFigure.lifetime
-    ) {
-        world.distantFigure = null;
-    }
-
-    if (
-        windGain
-    ) {
-
-        const target =
-            0.024 +
-            world.disturbance * 0.018;
-
-        windGain.gain.linearRampToValueAtTime(
-            target,
-            audioContext.currentTime + 1
+        player.position.addScaledVector(
+            direction,
+            player.speed * dt
         );
+
+        avatar.rotation.y =
+            player.yaw;
     }
-}
 
-/* ============================================================
-   DRAW HELPERS
-   ============================================================ */
-
-function bindMesh(mesh) {
-
-    gl.bindBuffer(
-        gl.ARRAY_BUFFER,
-        mesh.vertexBuffer
-    );
-
-    const stride = 8 * 4;
-
-    gl.enableVertexAttribArray(aPosition);
-
-    gl.vertexAttribPointer(
-        aPosition,
-        3,
-        gl.FLOAT,
-        false,
-        stride,
-        0
-    );
-
-    gl.enableVertexAttribArray(aNormal);
-
-    gl.vertexAttribPointer(
-        aNormal,
-        3,
-        gl.FLOAT,
-        false,
-        stride,
-        12
-    );
-
-    gl.enableVertexAttribArray(aUV);
-
-    gl.vertexAttribPointer(
-        aUV,
-        2,
-        gl.FLOAT,
-        false,
-        stride,
-        24
-    );
-
-    gl.bindBuffer(
-        gl.ELEMENT_ARRAY_BUFFER,
-        mesh.indexBuffer
-    );
-}
-
-function drawCube(model) {
-
-    gl.uniformMatrix4fv(
-        uModel,
-        false,
-        new Float32Array(model)
-    );
-
-    gl.drawElements(
-        gl.TRIANGLES,
-        cubeMesh.count,
-        gl.UNSIGNED_SHORT,
-        0
-    );
-}
-
-/* ============================================================
-   TREE DRAWING
-   ============================================================ */
-
-function drawTree(tree) {
-
-    const ground =
+    player.position.y =
         terrainHeight(
-            tree.x,
-            tree.z
+            player.position.x,
+            player.position.z
         );
 
-    let scaleValue =
-        tree.scale;
-
-    let rotation =
-        tree.rotation;
-
-    const key =
-        `${tree.x.toFixed(1)}:${tree.z.toFixed(1)}`;
-
-    const altered =
-        world.alteredTrees.get(key);
-
-    if (altered) {
-
-        scaleValue =
-            altered.scale;
-
-        rotation =
-            altered.rotation;
-    }
-
-    /*
-       Trunk
-    */
-
-    let model =
-        multiply(
-            translation(
-                tree.x,
-                ground + scaleValue * 1.15,
-                tree.z
-            ),
-            multiply(
-                rotationY(rotation),
-                scale(
-                    0.55 * scaleValue,
-                    2.3 * scaleValue,
-                    0.55 * scaleValue
-                )
-            )
-        );
-
-    drawCube(model);
-
-    /*
-       Main crown.
-    */
-
-    model =
-        multiply(
-            translation(
-                tree.x,
-                ground + scaleValue * 2.65,
-                tree.z
-            ),
-            multiply(
-                rotationY(rotation),
-                scale(
-                    2.8 * scaleValue,
-                    2.4 * scaleValue,
-                    2.8 * scaleValue
-                )
-            )
-        );
-
-    drawCube(model);
-
-    /*
-       Secondary crown.
-    */
-
-    model =
-        multiply(
-            translation(
-                tree.x +
-                Math.sin(rotation) *
-                scaleValue *
-                0.7,
-
-                ground +
-                scaleValue *
-                3.8,
-
-                tree.z +
-                Math.cos(rotation) *
-                scaleValue *
-                0.7
-            ),
-            scale(
-                1.8 * scaleValue,
-                1.7 * scaleValue,
-                1.8 * scaleValue
-            )
-        );
-
-    drawCube(model);
-}
-
-/* ============================================================
-   LANDMARK DRAWING
-   ============================================================ */
-
-function drawLandmark(landmark) {
-
-    const ground =
-        terrainHeight(
-            landmark.x,
-            landmark.z
-        );
-
-    if (landmark.type === "stone") {
-
-        drawCube(
-            multiply(
-                translation(
-                    landmark.x,
-                    ground + 0.6,
-                    landmark.z
-                ),
-                scale(
-                    1.8,
-                    1.2,
-                    1.5
-                )
-            )
-        );
-
-    } else if (
-        landmark.type === "dead_tree"
-    ) {
-
-        drawCube(
-            multiply(
-                translation(
-                    landmark.x,
-                    ground + 2.4,
-                    landmark.z
-                ),
-                scale(
-                    0.45,
-                    4.8,
-                    0.45
-                )
-            )
-        );
-
-    } else if (
-        landmark.type === "post"
-    ) {
-
-        drawCube(
-            multiply(
-                translation(
-                    landmark.x,
-                    ground + 1.7,
-                    landmark.z
-                ),
-                scale(
-                    0.35,
-                    3.4,
-                    0.35
-                )
-            )
-        );
-
-    } else if (
-        landmark.type === "structure"
-    ) {
-
-        drawCube(
-            multiply(
-                translation(
-                    landmark.x,
-                    ground + 1.5,
-                    landmark.z
-                ),
-                scale(
-                    3.5,
-                    3,
-                    2
-                )
-            )
-        );
-    }
-}
-
-/* ============================================================
-   HUMAN TRACE DRAWING
-   ============================================================ */
-
-function drawTrace(trace) {
-
-    const ground =
-        terrainHeight(
-            trace.x,
-            trace.z
-        );
-
-    /*
-       Abstract object.
-       It isn't explicitly explained.
-    */
-
-    drawCube(
-        multiply(
-            translation(
-                trace.x,
-                ground + 0.25,
-                trace.z
-            ),
-            scale(
-                0.9,
-                0.45,
-                0.25
-            )
-        )
+    avatar.position.copy(
+        player.position
     );
+
+    avatar.position.y += .02;
 }
 
-/* ============================================================
-   DISTANT FIGURE
-   ============================================================ */
-
-function drawDistantFigure() {
-
-    if (!world.distantFigure) {
-        return;
-    }
-
-    const figure =
-        world.distantFigure;
-
-    const distance =
-        Math.hypot(
-            figure.x -
-            player.position[0],
-
-            figure.z -
-            player.position[2]
-        );
-
-    if (distance > 45) {
-        return;
-    }
-
-    const ground =
-        terrainHeight(
-            figure.x,
-            figure.z
-        );
-
-    /*
-       The figure is deliberately extremely primitive.
-       At fog distance it can be mistaken for a tree.
-    */
-
-    drawCube(
-        multiply(
-            translation(
-                figure.x,
-                ground + 2.1,
-                figure.z
-            ),
-            scale(
-                0.55,
-                4.2,
-                0.35
-            )
-        )
-    );
-}
-
-/* ============================================================
-   GROUND
-   ============================================================ */
-
-function drawGround() {
-
-    /*
-       Large flat tiles.
-       Terrain height is evaluated per tile.
-    */
-
-    const centerX =
-        player.position[0];
-
-    const centerZ =
-        player.position[2];
-
-    const tileSize = 8;
-
-    const radius = 8;
-
-    for (
-        let z = -radius;
-        z <= radius;
-        z++
-    ) {
-
-        for (
-            let x = -radius;
-            x <= radius;
-            x++
-        ) {
-
-            const worldX =
-                Math.floor(
-                    centerX / tileSize
-                ) *
-                tileSize +
-                x * tileSize;
-
-            const worldZ =
-                Math.floor(
-                    centerZ / tileSize
-                ) *
-                tileSize +
-                z * tileSize;
-
-            const y =
-                terrainHeight(
-                    worldX,
-                    worldZ
-                ) - 0.15;
-
-            const model =
-                multiply(
-                    translation(
-                        worldX,
-                        y,
-                        worldZ
-                    ),
-                    scale(
-                        tileSize,
-                        0.25,
-                        tileSize
-                    )
-                );
-
-            drawCube(model);
-        }
-    }
-}
-
-/* ============================================================
-   PATH
-   ============================================================ */
-
-function drawPath() {
-
-    const centerZ =
-        player.position[2];
-
-    for (
-        let i = -10;
-        i <= 16;
-        i++
-    ) {
-
-        const z =
-            centerZ +
-            i * 7;
-
-        const x =
-            currentPathX(z);
-
-        const y =
-            terrainHeight(
-                x,
-                z
-            ) - 0.005;
-
-        const width =
-            3.0 +
-            Math.sin(z * 0.03) *
-            0.6;
-
-        drawCube(
-            multiply(
-                translation(
-                    x,
-                    y,
-                    z
-                ),
-                scale(
-                    width,
-                    0.08,
-                    7.2
-                )
-            )
-        );
-    }
-}
 
 /* ============================================================
    CAMERA
    ============================================================ */
 
-function getCameraTarget() {
-
-    const cosPitch =
-        Math.cos(player.pitch);
-
-    const sinPitch =
-        Math.sin(player.pitch);
-
-    const horizontalX =
-        -Math.sin(player.yaw) *
-        cosPitch;
-
-    const horizontalY =
-        sinPitch;
-
-    const horizontalZ =
-        -Math.cos(player.yaw) *
-        cosPitch;
-
-    return [
-        player.position[0] +
-            horizontalX,
-
-        player.position[1] +
-            horizontalY,
-
-        player.position[2] +
-            horizontalZ
-    ];
-}
-
-/* ============================================================
-   RENDER
-   ============================================================ */
-
-function render(time) {
-
-    const seconds =
-        time * 0.001;
-
-    updateWorld(
-        Math.min(
-            0.05,
-            seconds -
-            (render.previousTime || seconds)
-        )
-    );
-
-    render.previousTime =
-        seconds;
-
-    gl.enable(gl.DEPTH_TEST);
-
-    gl.depthFunc(gl.LEQUAL);
-
-    gl.clearColor(
-        0.006,
-        0.009,
-        0.008,
-        1
-    );
-
-    gl.clear(
-        gl.COLOR_BUFFER_BIT |
-        gl.DEPTH_BUFFER_BIT
-    );
-
-    gl.useProgram(program);
-
-    bindMesh(cubeMesh);
-
-    const aspect =
-        canvas.width /
-        canvas.height;
-
-    const projection =
-        perspective(
-            Math.PI / 2.8,
-            aspect,
-            0.1,
-            180
-        );
+function updateCamera(dt) {
 
     const target =
-        getCameraTarget();
+        new THREE.Vector3();
 
-    const view =
-        lookAt(
-            player.position,
-            target,
-            [0,1,0]
+    if (
+        player.thirdPerson
+    ) {
+
+        /*
+           Third-person Worlds-style view.
+        */
+
+        const distance = 7;
+
+        target.set(
+            player.position.x -
+                Math.sin(
+                    player.yaw
+                ) *
+                distance,
+
+            player.position.y +
+                3.5,
+
+            player.position.z -
+                Math.cos(
+                    player.yaw
+                ) *
+                distance
         );
 
-    gl.uniformMatrix4fv(
-        uProjection,
-        false,
-        new Float32Array(projection)
+        camera.position.lerp(
+            target,
+            1 -
+            Math.pow(
+                .001,
+                dt
+            )
+        );
+
+        const look =
+            new THREE.Vector3(
+                player.position.x,
+                player.position.y + 1.7,
+                player.position.z
+            );
+
+        camera.lookAt(
+            look
+        );
+
+        avatar.visible = true;
+
+    } else {
+
+        /*
+           First person.
+        */
+
+        camera.position.set(
+            player.position.x,
+            player.position.y + 2.7,
+            player.position.z
+        );
+
+        const direction =
+            new THREE.Vector3(
+                -Math.sin(
+                    player.yaw
+                ) *
+                Math.cos(
+                    player.pitch
+                ),
+
+                Math.sin(
+                    player.pitch
+                ),
+
+                -Math.cos(
+                    player.yaw
+                ) *
+                Math.cos(
+                    player.pitch
+                )
+            );
+
+        camera.lookAt(
+            camera.position.clone()
+                .add(direction)
+        );
+
+        avatar.visible = false;
+    }
+
+    playerLight.position.copy(
+        camera.position
+    );
+}
+
+
+/* ============================================================
+   INTERACTION
+   ============================================================ */
+
+let nearbyPortal = null;
+
+function interact() {
+
+    if (
+        !nearbyPortal
+    ) return;
+
+    loadWorld(
+        nearbyPortal.destination
+    );
+}
+
+function updateInteraction() {
+
+    nearbyPortal = null;
+
+    let closest =
+        Infinity;
+
+    for (
+        const portal
+        of portalObjects
+    ) {
+
+        const distance =
+            portal.object.position
+                .distanceTo(
+                    player.position
+                );
+
+        if (
+            distance < 8 &&
+            distance < closest
+        ) {
+
+            closest =
+                distance;
+
+            nearbyPortal =
+                portal;
+        }
+    }
+
+    const interaction =
+        document.getElementById(
+            "interaction"
+        );
+
+    if (
+        nearbyPortal
+    ) {
+
+        document.getElementById(
+            "interactionText"
+        ).textContent =
+            "ENTER " +
+            nearbyPortal.destination;
+
+        interaction.classList.add(
+            "visible"
+        );
+
+    } else {
+
+        interaction.classList.remove(
+            "visible"
+        );
+    }
+}
+
+
+/* ============================================================
+   WORLD MENU
+   ============================================================ */
+
+const worldMenu =
+    document.getElementById(
+        "worldMenu"
     );
 
-    gl.uniformMatrix4fv(
-        uView,
-        false,
-        new Float32Array(view)
+function toggleWorldMenu() {
+
+    worldMenu.classList.toggle(
+        "visible"
+    );
+}
+
+document.querySelectorAll(
+    ".world-card"
+).forEach(button => {
+
+    button.addEventListener(
+        "click",
+        () => {
+
+            loadWorld(
+                button.dataset.world
+            );
+
+            worldMenu.classList.remove(
+                "visible"
+            );
+        }
+    );
+});
+
+
+/* ============================================================
+   LOAD WORLD
+   ============================================================ */
+
+function loadWorld(
+    worldName
+) {
+
+    buildWorld(
+        worldName
     );
 
-    gl.uniform3fv(
-        uCameraPosition,
+    player.position.set(
+        0,
+        0,
+        10
+    );
+
+    player.yaw =
+        Math.PI;
+
+    showNotification(
+        "ENTERED " +
+        worldName
+    );
+}
+
+
+/* ============================================================
+   UI
+   ============================================================ */
+
+function updateWorldUI() {
+
+    const definition =
+        WORLD_DEFINITIONS[
+            currentWorld
+        ];
+
+    document.getElementById(
+        "worldName"
+    ).textContent =
+        definition.title;
+
+    document.getElementById(
+        "worldCode"
+    ).textContent =
+        definition.code;
+
+    document.getElementById(
+        "locationName"
+    ).textContent =
+        definition.location;
+
+    document.querySelectorAll(
+        ".world-card"
+    ).forEach(card => {
+
+        card.classList.toggle(
+            "active",
+            card.dataset.world ===
+            currentWorld
+        );
+    });
+}
+
+let notificationTimer;
+
+function showNotification(
+    message
+) {
+
+    const element =
+        document.getElementById(
+            "notification"
+        );
+
+    element.textContent =
+        message;
+
+    element.classList.add(
+        "visible"
+    );
+
+    clearTimeout(
+        notificationTimer
+    );
+
+    notificationTimer =
+        setTimeout(
+            () => {
+
+                element.classList.remove(
+                    "visible"
+                );
+
+            },
+            2500
+        );
+    );
+}
+
+
+/* ============================================================
+   CLOCK
+   ============================================================ */
+
+let worldTime = 18;
+
+function updateClock(dt) {
+
+    worldTime +=
+        dt * .35;
+
+    if (
+        worldTime >= 24
+    ) {
+
+        worldTime -= 24;
+    }
+
+    const hours =
+        Math.floor(
+            worldTime
+        );
+
+    const minutes =
+        Math.floor(
+            (worldTime - hours) *
+            60
+        );
+
+    document.getElementById(
+        "clock"
+    ).textContent =
+        String(hours)
+            .padStart(2, "0") +
+        ":" +
+        String(minutes)
+            .padStart(2, "0");
+
+    /*
+       Day/night light.
+    */
+
+    const daylight =
+        Math.max(
+            0,
+            Math.sin(
+                (
+                    worldTime -
+                    6
+                ) /
+                24 *
+                Math.PI *
+                2
+            )
+        );
+
+    sun.intensity =
+        .4 +
+        daylight * 2.2;
+
+    hemi.intensity =
+        .5 +
+        daylight * 1.4;
+}
+
+
+/* ============================================================
+   PORTAL ANIMATION
+   ============================================================ */
+
+function updatePortals(
+    time
+) {
+
+    for (
+        const portal
+        of portalObjects
+    ) {
+
+        portal.ring.rotation.z =
+            time * .0004;
+
+        portal.ring.scale.setScalar(
+            1 +
+            Math.sin(
+                time * .003
+            ) * .06
+        );
+    }
+}
+
+
+/* ============================================================
+   AMBIENT PARTICLES
+   ============================================================ */
+
+let particles;
+
+function createParticles() {
+
+    const geometry =
+        new THREE.BufferGeometry();
+
+    const count = 1800;
+
+    const positions =
         new Float32Array(
-            player.position
+            count * 3
+        );
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        positions[i * 3] =
+            (
+                Math.random() -
+                .5
+            ) * 280;
+
+        positions[i * 3 + 1] =
+            Math.random() * 60;
+
+        positions[i * 3 + 2] =
+            (
+                Math.random() -
+                .5
+            ) * 280;
+    }
+
+    geometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(
+            positions,
+            3
         )
     );
 
-    /*
-       Flashlight.
-       In this implementation it is approximated by a
-       strong local point light positioned slightly ahead
-       of the player's head.
-    */
+    particles =
+        new THREE.Points(
+            geometry,
+            new THREE.PointsMaterial({
 
-    const lightDistance = 2.0;
+                color: 0x9eb4a8,
 
-    const lightX =
-        player.position[0] -
-        Math.sin(player.yaw) *
-        lightDistance;
+                size: .055,
 
-    const lightY =
-        player.position[1] -
-        Math.sin(player.pitch) *
-        0.4;
+                transparent: true,
 
-    const lightZ =
-        player.position[2] -
-        Math.cos(player.yaw) *
-        lightDistance;
+                opacity: .38
+            })
+        );
 
-    gl.uniform3fv(
-        uLightPosition,
-        new Float32Array([
-            lightX,
-            lightY,
-            lightZ
-        ])
+    scene.add(
+        particles
     );
-
-    gl.uniform3fv(
-        uLightColor,
-        new Float32Array([
-            0.72,
-            0.86,
-            0.82
-        ])
-    );
-
-    gl.uniform1f(
-        uFogNear,
-        7.0
-    );
-
-    gl.uniform1f(
-        uFogFar,
-        48.0 -
-        world.disturbance * 10
-    );
-
-    gl.uniform1f(
-        uTime,
-        seconds
-    );
-
-    gl.uniform1f(
-        uWorldDisturbance,
-        world.disturbance
-    );
-
-    /*
-       Draw order doesn't matter for depth-tested opaque
-       geometry.
-    */
-
-    drawGround();
-
-    drawPath();
-
-    /*
-       Only draw nearby trees for performance.
-    */
-
-    for (const tree of trees) {
-
-        const dx =
-            tree.x -
-            player.position[0];
-
-        const dz =
-            tree.z -
-            player.position[2];
-
-        if (
-            Math.abs(dz) > 70 ||
-            Math.abs(dx) > 65
-        ) {
-            continue;
-        }
-
-        drawTree(tree);
-    }
-
-    for (const landmark of landmarks) {
-
-        const dz =
-            landmark.z -
-            player.position[2];
-
-        if (
-            Math.abs(dz) < 75
-        ) {
-            drawLandmark(landmark);
-        }
-    }
-
-    for (const trace of anomalies) {
-
-        const dz =
-            trace.z -
-            player.position[2];
-
-        if (
-            Math.abs(dz) < 55
-        ) {
-            drawTrace(trace);
-        }
-    }
-
-    drawDistantFigure();
-
-    requestAnimationFrame(render);
 }
 
+createParticles();
+
+
 /* ============================================================
-   START
+   START SCREEN
    ============================================================ */
 
-setTimeout(() => {
+document.getElementById(
+    "enter"
+).addEventListener(
+    "click",
+    () => {
 
-    document
-        .getElementById("boot")
-        .classList.add("hidden");
+        document.getElementById(
+            "start"
+        ).classList.add(
+            "hidden"
+        );
 
-    document
-        .getElementById("clickToStart")
-        .classList.add("visible");
+        document.getElementById(
+            "boot"
+        ).classList.add(
+            "hidden"
+        );
 
-}, 1600);
+        document.getElementById(
+            "hud"
+        ).classList.add(
+            "visible"
+        );
 
-requestAnimationFrame(render);
+        document.getElementById(
+            "crosshair"
+        ).classList.add(
+            "visible"
+        );
+
+        document.getElementById(
+            "controls"
+        ).classList.add(
+            "visible"
+        );
+
+        player.active = true;
+
+        canvas.requestPointerLock();
+    }
+);
+
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        camera.aspect =
+            window.innerWidth /
+            window.innerHeight;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+        renderer.setPixelRatio(
+            Math.min(
+                window.devicePixelRatio,
+                1.75
+            )
+        );
+    }
+);
+
+
+/* ============================================================
+   ANIMATION
+   ============================================================ */
+
+const clock =
+    new THREE.Clock();
+
+let previousTime = 0;
+
+function animate(time) {
+
+    requestAnimationFrame(
+        animate
+    );
+
+    const dt =
+        Math.min(
+            clock.getDelta(),
+            .05
+        );
+
+    updatePlayer(dt);
+
+    updateCamera(dt);
+
+    updateInteraction();
+
+    updateClock(dt);
+
+    updatePortals(time);
+
+    if (particles) {
+
+        particles.rotation.y =
+            time * .00001;
+    }
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+/* ============================================================
+   INITIAL WORLD
+   ============================================================ */
+
+buildWorld(
+    "HOME"
+);
+
+animate(0);
