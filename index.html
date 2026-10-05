@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WorldsPlayer</title>
+    <title>GroundZero Builder</title>
     <style>
         body {
             margin: 0;
@@ -12,150 +12,83 @@
             font-family: 'MS Sans Serif', Arial, sans-serif;
             user-select: none;
         }
-        /* Contenedor principal de la ventana 3D */
         #canvas-container {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 140px; /* Espacio para la barra lateral típica de Worlds */
-            bottom: 85px; /* Espacio para la consola de chat inferior */
+            top: 0; left: 0; right: 140px; bottom: 85px;
         }
-        /* Barra Lateral Derecha Estilo WorldsPlayer */
         #sidebar {
             position: absolute;
-            top: 0;
-            right: 0;
-            width: 140px;
-            height: 100%;
+            top: 0; right: 0; width: 140px; height: 100%;
             background: linear-gradient(to right, #0011bb, #2244ff);
             border-left: 2px solid #88aaff;
-            display: flex;
-            flex-direction: column;
-            padding: 5px;
-            box-sizing: border-box;
-            z-index: 10;
+            display: flex; flex-direction: column; padding: 5px; box-sizing: border-box; z-index: 10;
         }
         .worlds-btn {
             background: linear-gradient(to bottom, #d0d0d0, #808080);
-            border: 2px outset #ffffff;
-            color: #000;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 6px 4px;
-            margin-bottom: 4px;
-            text-align: center;
-            cursor: pointer;
+            border: 2px outset #ffffff; color: #000; font-size: 11px; font-weight: bold;
+            padding: 6px 4px; margin-bottom: 4px; text-align: center; cursor: pointer;
         }
-        .worlds-btn:active {
-            border: 2px inset #ffffff;
-        }
-        .sidebar-section {
-            color: #ffff00;
+        .worlds-btn:active { border: 2px inset #ffffff; }
+        .sidebar-section { color: #ffff00; font-size: 10px; margin-top: 10px; margin-bottom: 2px; border-bottom: 1px solid #ffff00; }
+        
+        /* Panel de Construcción de Prims (Estilo Constructor Retro) */
+        #builder-panel {
+            background: rgba(0, 0, 80, 0.9);
+            border: 2px solid #00ffcc;
+            padding: 6px;
+            margin-top: 5px;
+            color: #fff;
             font-size: 10px;
-            margin-top: 10px;
-            margin-bottom: 2px;
-            border-bottom: 1px solid #ffff00;
         }
-        /* Consola inferior de chat y estado */
+
         #bottom-console {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 85px;
-            background: #0000aa;
-            border-top: 2px solid #fff;
-            display: flex;
-            flex-direction: column;
-            z-index: 10;
+            position: absolute; bottom: 0; left: 0; right: 0; height: 85px;
+            background: #0000aa; border-top: 2px solid #fff; display: flex; flex-direction: column; z-index: 10;
         }
         #chat-output {
-            flex-grow: 1;
-            background: #ffffcc;
-            color: #000;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            padding: 4px 8px;
-            overflow-y: auto;
-            border: 2px inset #808080;
-            margin: 4px;
+            flex-grow: 1; background: #ffffcc; color: #000; font-family: 'Courier New', monospace;
+            font-size: 12px; padding: 4px 8px; overflow-y: auto; border: 2px inset #808080; margin: 4px;
         }
-        #chat-input-row {
-            display: flex;
-            padding: 0 4px 4px 4px;
-        }
-        #chat-input {
-            flex-grow: 1;
-            background: #fff;
-            border: 2px inset #808080;
-            height: 20px;
-            padding: 0 4px;
-            font-size: 12px;
-        }
-        /* Barra de título superior */
+        #chat-input-row { display: flex; padding: 0 4px 4px 4px; }
+        #chat-input { flex-grow: 1; background: #fff; border: 2px inset #808080; height: 20px; padding: 0 4px; font-size: 12px; }
         #top-titlebar {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 140px;
-            height: 22px;
-            background: linear-gradient(to right, #000080, #1084d0);
-            color: white;
-            font-size: 12px;
-            padding-left: 6px;
-            line-height: 22px;
-            font-weight: bold;
-            z-index: 10;
-        }
-        #crosshair {
-            position: absolute;
-            top: calc(50% - 42px);
-            left: calc(50% - 70px);
-            width: 10px;
-            height: 10px;
-            transform: translate(-50%, -50%);
-            color: #00ff00;
-            font-weight: bold;
-            pointer-events: none;
-            z-index: 5;
+            position: absolute; top: 0; left: 0; right: 140px; height: 22px;
+            background: linear-gradient(to right, #000080, #1084d0); color: white;
+            font-size: 12px; padding-left: 6px; line-height: 22px; font-weight: bold; z-index: 10;
         }
     </style>
 </head>
 <body>
 
-    <div id="top-titlebar">WorldsPlayer by Worlds.com - GroundZero</div>
-    <div id="crosshair">+</div>
-
+    <div id="top-titlebar">WorldsPlayer - GroundZero [Avatar & Builder Active]</div>
     <div id="canvas-container"></div>
 
-    <!-- Barra lateral clásica -->
     <div id="sidebar">
         <div class="worlds-btn">Help</div>
-        <div class="worlds-btn">Options</div>
-        <div class="worlds-btn">WorldsMail</div>
-        <div class="worlds-btn">WorldsMark</div>
         <div class="worlds-btn">Teleport</div>
-        <div class="worlds-btn">Actions</div>
         <div class="worlds-btn" style="color: #ff0000;">VIP</div>
         
+        <div class="sidebar-section">BUILDER (PRIMS)</div>
+        <div id="builder-panel">
+            <p style="margin:2px 0;">Crear Objeto:</p>
+            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cube')">+ Cubo Prim</button>
+            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('sphere')">+ Esfera Prim</button>
+            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cylinder')">+ Cilindro Prim</button>
+        </div>
+
         <div class="sidebar-section">FRIENDS ONLINE</div>
-        <div style="color: #fff; font-size: 10px; overflow-y: auto; flex-grow: 1;">
-            - s1rl4ugh5<br>
-            - LordSatan<br>
-            - yoyoi<br>
-            - BelladonnaCove
+        <div style="color: #fff; font-size: 10px; overflow-y: auto; height: 80px;">
+            - s1rl4ugh5 (Tú)<br>- T4k3YOurPill5<br>- M15T1FY_<br>- SirGrandpa[cite: 2]
         </div>
         <div class="worlds-btn" style="margin-top:auto;">Universe Map</div>
-        <div class="worlds-btn">Avatar Gallery</div>
     </div>
 
-    <!-- Consola de chat inferior exacta a la época -->
     <div id="bottom-console">
         <div id="chat-output">
-            <b>WORLDMASTER&gt;</b> Welcome to Worlds! We're currently tracking down issues that have been locking up the servers! Restarts will be common!
+            <b>WORLDMASTER&gt;</b> ¡Sistema de construcción de Prims activo! Selecciona un prim en el panel lateral para colocarlo frente a ti.
         </div>
         <div id="chat-input-row">
-            <input type="text" id="chat-input" placeholder="Escribe un mensaje aquí y pulsa Enter..." />
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." />
         </div>
     </div>
 
@@ -163,137 +96,126 @@
     <script>
         const container = document.getElementById('canvas-container');
 
-        // 1. Escena y Cielo azul clásico con horizonte montañoso
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x3a88ee); // Azul cielo brillante típico de GroundZero
+        scene.background = new THREE.Color(0x3a88ee); // Cielo clásico
 
         const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(container.clientWidth, container.clientHeight);
         container.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-        scene.add(ambientLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(10, 30, 20);
         scene.add(dirLight);
 
-        // 2. TEXTURA EXACTA DEL SUELO DE GROUNDZERO (Baldosas azules ornamentadas con rombos)
-        function createGroundZeroFloorTexture() {
+        // --- 1. SUELO DE BALDOSAS ORNAMENTADAS DE GROUNDZERO ---
+        function createFloorTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
+            canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
-
-            // Fondo azul verdoso característico
-            ctx.fillStyle = '#0b5394';
-            ctx.fillRect(0, 0, 256, 256);
-
-            // Cuadrícula y marcos ornamentados
-            ctx.strokeStyle = '#073763';
-            ctx.lineWidth = 8;
-            ctx.strokeRect(0, 0, 256, 256);
-
-            // Patrón geométrico interno en forma de rombo/cruz típico de la baldosa
+            ctx.fillStyle = '#0b5394'; ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#073763'; ctx.lineWidth = 8; ctx.strokeRect(0, 0, 256, 256);
             ctx.fillStyle = '#16487c';
-            ctx.beginPath();
-            ctx.moveTo(128, 20);
-            ctx.lineTo(236, 128);
-            ctx.lineTo(128, 236);
-            ctx.lineTo(20, 128);
-            ctx.closePath();
-            ctx.fill();
-
-            // Detalles dorados/claros centrales
-            ctx.strokeStyle = '#6fa8dc';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(128, 50);
-            ctx.lineTo(206, 128);
-            ctx.lineTo(128, 206);
-            ctx.lineTo(50, 128);
-            ctx.closePath();
-            ctx.stroke();
-
-            // Pequeños símbolos decorativos en las esquinas
-            ctx.fillStyle = '#2986cc';
-            ctx.fillRect(30, 30, 20, 20);
-            ctx.fillRect(206, 30, 20, 20);
-            ctx.fillRect(30, 206, 20, 20);
-            ctx.fillRect(206, 206, 20, 20);
-
+            ctx.beginPath(); ctx.moveTo(128, 20); ctx.lineTo(236, 128); ctx.lineTo(128, 236); ctx.lineTo(20, 128); ctx.fill();
             const texture = new THREE.CanvasTexture(canvas);
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.RepeatWrapping;
+            texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
             return texture;
         }
-
-        const floorTex = createGroundZeroFloorTexture();
-        floorTex.repeat.set(40, 40);
-
-        // Suelo principal
-        const floorGeo = new THREE.PlaneGeometry(400, 400);
-        const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
+        const floorTex = createFloorTexture(); floorTex.repeat.set(30, 30);
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({ map: floorTex }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // 3. LA ARQUITECTURA DEL DOMO DE GROUNDZERO (Vigas diagonales gigantes que convergen arriba)
+        // --- 2. INFRAESTRUCTURA DE EDIFICIO Y AUDITORIO ---
+        // Edificio perimetral industrial
+        const buildingMat = new THREE.MeshLambertMaterial({ color: 0x666677 });
+        const building = new THREE.Mesh(new THREE.BoxGeometry(120, 35, 15), buildingMat);
+        building.position.set(0, 17.5, -60);
+        scene.add(building);
+
+        // Letrero del "Auditorium" idéntico a la referencia
+        function createAuditoriumSign() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 256, 64);
+            ctx.fillStyle = '#0000aa'; ctx.font = 'bold 32px Arial'; ctx.fillText('Auditorium', 20, 42);
+            const tex = new THREE.CanvasTexture(canvas);
+            return new THREE.MeshBasicMaterial({ map: tex });
+        }
+        const sign = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 1), createAuditoriumSign());
+        sign.position.set(-25, 12, -52);
+        scene.add(sign);
+
+        // Cúpula superior y vigas diagonales
         const beamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        
-        // Crear la estructura de pilares inclinados que forman la cúpula central
-        const numBeams = 8;
-        for (let i = 0; i < numBeams; i++) {
-            const angle = (i / numBeams) * Math.PI * 2;
-            const beamGeo = new THREE.BoxGeometry(1.5, 90, 1.5);
-            const beam = new THREE.Mesh(beamGeo, beamMat);
-            
-            beam.position.set(Math.cos(angle) * 20, 35, Math.sin(angle) * 20);
-            beam.rotation.y = angle;
-            beam.rotation.z = (i % 2 === 0 ? 0.35 : -0.35); // Inclinación hacia adentro formando la cúpula
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(1.5, 80, 1.5), beamMat);
+            beam.position.set(Math.cos(angle) * 25, 30, Math.sin(angle) * 25);
+            beam.rotation.y = angle; beam.rotation.z = (i % 2 === 0 ? 0.3 : -0.3);
             scene.add(beam);
         }
 
-        // Anillo superior de la cúpula
-        const ringGeo = new THREE.TorusGeometry(18, 1.2, 8, 24);
-        const ring = new THREE.Mesh(ringGeo, beamMat);
-        ring.rotation.x = Math.PI / 2;
-        ring.position.y = 65;
-        scene.add(ring);
-
-        // 4. EL ENTORNO: Montañas lejanas de fondo (Skybox rústico plano)
-        const mountainGeo = new THREE.CylinderGeometry(190, 190, 50, 16, 1, true);
+        // --- 3. CREACIÓN DEL AVATAR DEL JUGADOR (Visible en tercera persona) ---
+        const avatarGroup = new THREE.Group();
         
-        // Canvas para textura de montañas pixeladas estilo 1995
-        const mountCanvas = document.createElement('canvas');
-        mountCanvas.width = 512;
-        mountCanvas.height = 128;
-        const mCtx = mountCanvas.getContext('2d');
-        mCtx.fillStyle = '#5c768d'; // Color base horizonte
-        mCtx.fillRect(0, 0, 512, 128);
-        // Dibujar siluetas de montañas rudimentarias
-        mCtx.fillStyle = '#4a5d70';
-        mCtx.beginPath();
-        mCtx.moveTo(0, 128);
-        for(let x=0; x<=512; x+=40) {
-            mCtx.lineTo(x, 40 + Math.sin(x)*30);
+        // Cuerpo del avatar (estilo bloques retro estilo Worlds)
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.6), new THREE.MeshLambertMaterial({color: 0xcc3333}));
+        torso.position.y = 1.8;
+        avatarGroup.add(torso);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: 0xffccaa}));
+        head.position.y = 3.0;
+        avatarGroup.add(head);
+
+        // Nombre flotante encima del avatar
+        function createNameTag(name) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0,0,256,64);
+            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(name, 128, 40);
+            const tex = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(3, 0.75, 1);
+            sprite.position.y = 3.8;
+            return sprite;
         }
-        mCtx.lineTo(512, 128);
-        mCtx.fill();
-        
-        const mountTex = new THREE.CanvasTexture(mountCanvas);
-        mountTex.wrapS = THREE.RepeatWrapping;
-        const mountMat = new THREE.MeshBasicMaterial({ map: mountTex, side: THREE.BackSide });
-        const mountains = new THREE.Mesh(mountainGeo, mountMat);
-        mountains.position.y = 15;
-        scene.add(mountains);
+        avatarGroup.add(createNameTag('s1rl4ugh5'));
+        scene.add(avatarGroup);
 
-        // 5. Posición de la cámara en el centro exacto de GroundZero
-        camera.position.set(0, 3, 10);
+        // --- 4. SISTEMA DE CONSTRUCCIÓN DE PRIMS ---
+        const builtPrims = [];
+        function spawnPrim(type) {
+            let geom;
+            if (type === 'cube') geom = new THREE.BoxGeometry(2, 2, 2);
+            else if (type === 'sphere') geom = new THREE.SphereGeometry(1.2, 16, 16);
+            else geom = new THREE.CylinderGeometry(1, 1, 3, 16);
 
-        // 6. Controles de Movimiento exactos (WASD + Flechas de repuesto)
+            // Material brillante típico de objetos colocados en mundos virtuales
+            const mat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+            const prim = new THREE.Mesh(geom, mat);
+
+            // Colocar el prim justo en frente del avatar
+            const forward = new THREE.Vector3(0, 0, -5).applyAxisAngle(new THREE.Vector3(0,1,0), avatarRotationY);
+            prim.position.copy(avatarGroup.position).add(forward);
+            prim.position.y += 1;
+
+            scene.add(prim);
+            builtPrims.push(prim);
+            
+            document.getElementById('chat-output').innerHTML += `<br><span style="color:green;"><b>SISTEMA&gt;</b> Prim (${type}) creado con éxito en el mundo.</span>`;
+            document.getElementById('chat-output').scrollTop = document.getElementById('chat-output').scrollHeight;
+        }
+
+        // --- 5. MOVIMIENTO Y CÁMARA EN TERCERA PERSONA ---
         const moveState = { forward: false, backward: false, left: false, right: false };
-        
+        let avatarRotationY = 0;
+
         window.addEventListener('keydown', (e) => {
             if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') moveState.forward = true;
             if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') moveState.backward = true;
@@ -308,42 +230,44 @@
             if (e.key === 'd' || e.key === 'D') moveState.left = false;
         });
 
-        // Rotación con ratón dentro del canvas 3D
-        let isMouseDown = false;
-        let mouseX = 0;
-        let cameraRotationY = 0;
-
+        let isMouseDown = false, mouseX = 0;
         container.addEventListener('mousedown', (e) => { isMouseDown = true; mouseX = e.clientX; });
         window.addEventListener('mouseup', () => { isMouseDown = false; });
         window.addEventListener('mousemove', (e) => {
             if (!isMouseDown) return;
             let deltaX = e.clientX - mouseX;
-            cameraRotationY -= deltaX * 0.004;
-            camera.rotation.y = cameraRotationY;
+            avatarRotationY -= deltaX * 0.005;
+            avatarGroup.rotation.y = avatarRotationY;
             mouseX = e.clientX;
         });
 
-        // Bucle principal
+        avatarGroup.position.set(0, 0, 10);
+
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
 
             const delta = clock.getDelta();
-            const speed = 15 * delta;
+            const speed = 12 * delta;
 
-            const dir = new THREE.Vector3();
-            camera.getWorldDirection(dir);
-            dir.y = 0;
-            dir.normalize();
+            const moveDir = new THREE.Vector3(0, 0, 0);
+            const forwardVec = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
+            const sideVec = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
 
-            const sideDir = new THREE.Vector3(-dir.z, 0, dir.x);
+            if (moveState.forward) moveDir.add(forwardVec);
+            if (moveState.backward) moveDir.sub(forwardVec);
+            if (moveState.right) moveDir.add(sideVec);
+            if (moveState.left) moveDir.sub(sideVec);
 
-            if (moveState.forward) camera.position.addScaledVector(dir, speed);
-            if (moveState.backward) camera.position.addScaledVector(dir, -speed);
-            if (moveState.left) camera.position.addScaledVector(sideDir, speed);
-            if (moveState.right) camera.position.addScaledVector(sideDir, -speed);
+            if (moveDir.lengthSq() > 0) {
+                moveDir.normalize();
+                avatarGroup.position.addScaledVector(moveDir, speed);
+            }
 
-            camera.position.y = 3; // Altura fija de caminata
+            // Cámara en tercera persona siguiendo al avatar de cerca
+            const camOffset = new THREE.Vector3(0, 4, 8).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
+            camera.position.copy(avatarGroup.position).add(camOffset);
+            camera.lookAt(avatarGroup.position.clone().add(new THREE.Vector3(0, 2, 0)));
 
             renderer.render(scene, camera);
         }
@@ -356,7 +280,6 @@
             renderer.setSize(container.clientWidth, container.clientHeight);
         });
 
-        // Funcionalidad básica del chat inferior
         const chatInput = document.getElementById('chat-input');
         const chatOutput = document.getElementById('chat-output');
         chatInput.addEventListener('keydown', (e) => {
