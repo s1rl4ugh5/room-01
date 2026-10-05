@@ -2,25 +2,183 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
     <title>ROOM_01</title>
-    <link rel="stylesheet" href="style.css">
+
+    <link
+        rel="stylesheet"
+        href="./style.css"
+    >
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"
+        }
+    }
+    </script>
 </head>
 
 <body>
 
-<canvas id="canvas"></canvas>
+<div id="app">
 
-<div id="boot">
-    <div>ROOM_01</div>
-    <small>forest build 0.4.0</small>
+    <canvas id="world"></canvas>
+
+    <div id="boot">
+        <div class="boot-title">ROOM_01</div>
+        <div class="boot-line"></div>
+        <div class="boot-sub">
+            DISTRIBUTED SPATIAL ENVIRONMENT
+        </div>
+    </div>
+
+    <div id="start">
+
+        <div class="start-mark">
+            R01
+        </div>
+
+        <div class="start-title">
+            ROOM_01
+        </div>
+
+        <div class="start-sub">
+            A SMALL WORLD INSIDE THE BROWSER
+        </div>
+
+        <button id="enter">
+            ENTER
+        </button>
+
+    </div>
+
+    <div id="hud">
+
+        <div id="hud-left">
+
+            <div class="hud-world">
+                <span id="worldName">HOME</span>
+                <span class="dot">●</span>
+                <span id="worldCode">W-01</span>
+            </div>
+
+            <div
+                class="hud-location"
+                id="locationName"
+            >
+                CENTRAL
+            </div>
+
+        </div>
+
+        <div id="hud-right">
+
+            <div id="clock">
+                00:00
+            </div>
+
+            <div id="population">
+                LOCAL / 01
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="crosshair">
+        <span></span>
+    </div>
+
+    <div id="interaction">
+        <div id="interactionKey">E</div>
+        <div id="interactionText">
+            INTERACT
+        </div>
+    </div>
+
+    <div id="worldMenu">
+
+        <div class="menu-header">
+            <span>ROOM_01</span>
+            <span>WORLD INDEX</span>
+        </div>
+
+        <div class="menu-worlds">
+
+            <button
+                class="world-card active"
+                data-world="HOME"
+            >
+                <strong>HOME</strong>
+                <span>W-01</span>
+                <small>
+                    THE FIRST ROOM
+                </small>
+            </button>
+
+            <button
+                class="world-card"
+                data-world="VERDANT"
+            >
+                <strong>VERDANT</strong>
+                <span>W-02</span>
+                <small>
+                    FOREST / LAKE / RUINS
+                </small>
+            </button>
+
+            <button
+                class="world-card"
+                data-world="NULL"
+            >
+                <strong>NULL</strong>
+                <span>W-03</span>
+                <small>
+                    UNSTABLE SPATIAL TEST
+                </small>
+            </button>
+
+        </div>
+
+        <div class="menu-footer">
+            ESC CLOSE
+        </div>
+
+    </div>
+
+    <div id="notification"></div>
+
+    <div id="controls">
+
+        <span>W A S D</span>
+        <span>MOVE</span>
+
+        <span>MOUSE</span>
+        <span>LOOK</span>
+
+        <span>C</span>
+        <span>CAMERA</span>
+
+        <span>E</span>
+        <span>USE</span>
+
+        <span>TAB</span>
+        <span>WORLDS</span>
+
+    </div>
+
 </div>
 
-<div id="clickToStart">
-    <span>CLICK TO ENTER</span>
-</div>
-
-<script type="module" src="src/main.js"></script>
+<script
+    type="module"
+    src="./src/main.js"
+></script>
 
 </body>
 </html>
