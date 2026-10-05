@@ -3,120 +3,224 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WORLDS.COM // Replica Scene</title>
+    <title>WorldsPlayer</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #050505;
-            font-family: 'Courier New', Courier, monospace;
+            background-color: #000;
+            font-family: 'MS Sans Serif', Arial, sans-serif;
             user-select: none;
         }
-        #ui {
+        /* Contenedor principal de la ventana 3D */
+        #canvas-container {
             position: absolute;
-            bottom: 15px;
-            left: 15px;
-            color: #00ffcc;
-            background: rgba(0, 0, 0, 0.85);
-            border: 2px solid #00ffcc;
-            padding: 12px;
-            width: 320px;
-            pointer-events: none;
-            box-shadow: 4px 4px 0px #005544;
+            top: 0;
+            left: 0;
+            right: 140px; /* Espacio para la barra lateral típica de Worlds */
+            bottom: 85px; /* Espacio para la consola de chat inferior */
+        }
+        /* Barra Lateral Derecha Estilo WorldsPlayer */
+        #sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 140px;
+            height: 100%;
+            background: linear-gradient(to right, #0011bb, #2244ff);
+            border-left: 2px solid #88aaff;
+            display: flex;
+            flex-direction: column;
+            padding: 5px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .worlds-btn {
+            background: linear-gradient(to bottom, #d0d0d0, #808080);
+            border: 2px outset #ffffff;
+            color: #000;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 6px 4px;
+            margin-bottom: 4px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .worlds-btn:active {
+            border: 2px inset #ffffff;
+        }
+        .sidebar-section {
+            color: #ffff00;
+            font-size: 10px;
+            margin-top: 10px;
+            margin-bottom: 2px;
+            border-bottom: 1px solid #ffff00;
+        }
+        /* Consola inferior de chat y estado */
+        #bottom-console {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 85px;
+            background: #0000aa;
+            border-top: 2px solid #fff;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+        #chat-output {
+            flex-grow: 1;
+            background: #ffffcc;
+            color: #000;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 4px 8px;
+            overflow-y: auto;
+            border: 2px inset #808080;
+            margin: 4px;
+        }
+        #chat-input-row {
+            display: flex;
+            padding: 0 4px 4px 4px;
+        }
+        #chat-input {
+            flex-grow: 1;
+            background: #fff;
+            border: 2px inset #808080;
+            height: 20px;
+            padding: 0 4px;
+            font-size: 12px;
+        }
+        /* Barra de título superior */
+        #top-titlebar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 140px;
+            height: 22px;
+            background: linear-gradient(to right, #000080, #1084d0);
+            color: white;
+            font-size: 12px;
+            padding-left: 6px;
+            line-height: 22px;
+            font-weight: bold;
+            z-index: 10;
         }
         #crosshair {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 8px;
-            height: 8px;
+            top: calc(50% - 42px);
+            left: calc(50% - 70px);
+            width: 10px;
+            height: 10px;
             transform: translate(-50%, -50%);
-            color: #00ffcc;
+            color: #00ff00;
             font-weight: bold;
-        }
-        #chat-box {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            color: #fff;
-            background: rgba(0,0,0,0.7);
-            border: 1px dashed #666;
-            padding: 8px;
-            font-size: 12px;
+            pointer-events: none;
+            z-index: 5;
         }
     </style>
 </head>
 <body>
 
+    <div id="top-titlebar">WorldsPlayer by Worlds.com - GroundZero</div>
     <div id="crosshair">+</div>
-    <div id="chat-box"><b>Worlds 3D Client v1.1</b><br><span>Sistema de Chat: Conectado...</span></div>
-    <div id="ui">
-        <h3 style="margin:0 0 5px 0; color:#ffff00;">[ MUNDO: GROUND-ZERO ]</h3>
-        <p style="margin:2px 0;">Movimiento: <b>W A S D</b></p>
-        <p style="margin:2px 0;">Cámara: Clic izq. + Arrastrar ratón</p>
+
+    <div id="canvas-container"></div>
+
+    <!-- Barra lateral clásica -->
+    <div id="sidebar">
+        <div class="worlds-btn">Help</div>
+        <div class="worlds-btn">Options</div>
+        <div class="worlds-btn">WorldsMail</div>
+        <div class="worlds-btn">WorldsMark</div>
+        <div class="worlds-btn">Teleport</div>
+        <div class="worlds-btn">Actions</div>
+        <div class="worlds-btn" style="color: #ff0000;">VIP</div>
+        
+        <div class="sidebar-section">FRIENDS ONLINE</div>
+        <div style="color: #fff; font-size: 10px; overflow-y: auto; flex-grow: 1;">
+            - s1rl4ugh5<br>
+            - LordSatan<br>
+            - yoyoi<br>
+            - BelladonnaCove
+        </div>
+        <div class="worlds-btn" style="margin-top:auto;">Universe Map</div>
+        <div class="worlds-btn">Avatar Gallery</div>
+    </div>
+
+    <!-- Consola de chat inferior exacta a la época -->
+    <div id="bottom-console">
+        <div id="chat-output">
+            <b>WORLDMASTER&gt;</b> Welcome to Worlds! We're currently tracking down issues that have been locking up the servers! Restarts will be common!
+        </div>
+        <div id="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje aquí y pulsa Enter..." />
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        // 1. Escena y niebla densa típica de los 90 para ocultar el horizonte
+        const container = document.getElementById('canvas-container');
+
+        // 1. Escena y Cielo azul clásico con horizonte montañoso
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x080812);
-        scene.fog = new THREE.FogExp2(0x080812, 0.035);
+        scene.background = new THREE.Color(0x3a88ee); // Azul cielo brillante típico de GroundZero
 
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // Gráficos pixelados sin suavizado
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+        const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
 
-        // 2. Iluminación cenital y plana (Flat / Lambert)
-        const ambientLight = new THREE.AmbientLight(0x8888aa, 0.8);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffeedd, 0.6);
-        dirLight.position.set(20, 40, 20);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(10, 30, 20);
         scene.add(dirLight);
 
-        // 3. GENERADOR DE TEXTURAS RETRO ESTILO WORLDS.COM (Procedurales)
-        function createRetroTexture(type) {
+        // 2. TEXTURA EXACTA DEL SUELO DE GROUNDZERO (Baldosas azules ornamentadas con rombos)
+        function createGroundZeroFloorTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
+            canvas.width = 256;
+            canvas.height = 256;
             const ctx = canvas.getContext('2d');
 
-            if (type === 'floor') {
-                // Suelo tipo baldícula cuadriculada con ruido de los 90
-                ctx.fillStyle = '#444455';
-                ctx.fillRect(0, 0, 128, 128);
-                ctx.fillStyle = '#222233';
-                ctx.fillRect(0, 0, 64, 64);
-                ctx.fillRect(64, 64, 64, 64);
-                // Añadir rejilla interior
-                ctx.strokeStyle = '#111115';
-                ctx.lineWidth = 4;
-                ctx.strokeRect(0, 0, 128, 128);
-            } else if (type === 'wall') {
-                // Pared metálica/industrial con parches
-                ctx.fillStyle = '#555560';
-                ctx.fillRect(0, 0, 128, 128);
-                ctx.fillStyle = '#3a3a45';
-                ctx.fillRect(10, 10, 108, 108);
-                ctx.fillStyle = '#22222a';
-                ctx.fillRect(20, 20, 88, 88);
-                // Líneas de remaches
-                ctx.fillStyle = '#888899';
-                ctx.fillRect(15, 15, 6, 6);
-                ctx.fillRect(107, 15, 6, 6);
-                ctx.fillRect(15, 107, 6, 6);
-                ctx.fillRect(107, 107, 6, 6);
-            } else if (type === 'pillar') {
-                // Textura abstracta psicodélica o marmórea de baja calidad
-                ctx.fillStyle = '#773355';
-                ctx.fillRect(0, 0, 128, 128);
-                for(let i=0; i<20; i++) {
-                    ctx.fillStyle = Math.random() > 0.5 ? '#aa4477' : '#441133';
-                    ctx.fillRect(Math.random()*128, Math.random()*128, Math.random()*40, Math.random()*40);
-                }
-            }
+            // Fondo azul verdoso característico
+            ctx.fillStyle = '#0b5394';
+            ctx.fillRect(0, 0, 256, 256);
+
+            // Cuadrícula y marcos ornamentados
+            ctx.strokeStyle = '#073763';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(0, 0, 256, 256);
+
+            // Patrón geométrico interno en forma de rombo/cruz típico de la baldosa
+            ctx.fillStyle = '#16487c';
+            ctx.beginPath();
+            ctx.moveTo(128, 20);
+            ctx.lineTo(236, 128);
+            ctx.lineTo(128, 236);
+            ctx.lineTo(20, 128);
+            ctx.closePath();
+            ctx.fill();
+
+            // Detalles dorados/claros centrales
+            ctx.strokeStyle = '#6fa8dc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(128, 50);
+            ctx.lineTo(206, 128);
+            ctx.lineTo(128, 206);
+            ctx.lineTo(50, 128);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Pequeños símbolos decorativos en las esquinas
+            ctx.fillStyle = '#2986cc';
+            ctx.fillRect(30, 30, 20, 20);
+            ctx.fillRect(206, 30, 20, 20);
+            ctx.fillRect(30, 206, 20, 20);
+            ctx.fillRect(206, 206, 20, 20);
 
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = THREE.RepeatWrapping;
@@ -124,76 +228,92 @@
             return texture;
         }
 
-        const floorTex = createRetroTexture('floor');
-        floorTex.repeat.set(30, 30);
-        const wallTex = createRetroTexture('wall');
-        wallTex.repeat.set(4, 2);
-        const pillarTex = createRetroTexture('pillar');
+        const floorTex = createGroundZeroFloorTexture();
+        floorTex.repeat.set(40, 40);
 
-        // 4. Construcción del escenario
-        // Suelo gigante
-        const floorGeo = new THREE.PlaneGeometry(300, 300);
+        // Suelo principal
+        const floorGeo = new THREE.PlaneGeometry(400, 400);
         const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // Estructura central / monolitos / pasillos extraños característicos de Worlds
-        const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
-        const pillarMat = new THREE.MeshLambertMaterial({ map: pillarTex });
-
-        // Crear una plaza central con estructuras laberínticas
-        for (let i = 0; i < 20; i++) {
-            const angle = (i / 20) * Math.PI * 2;
-            const radius = 25 + Math.random() * 15;
-            const x = Math.cos(angle) * radius;
-            const z = Math.sin(angle) * radius;
+        // 3. LA ARQUITECTURA DEL DOMO DE GROUNDZERO (Vigas diagonales gigantes que convergen arriba)
+        const beamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        
+        // Crear la estructura de pilares inclinados que forman la cúpula central
+        const numBeams = 8;
+        for (let i = 0; i < numBeams; i++) {
+            const angle = (i / numBeams) * Math.PI * 2;
+            const beamGeo = new THREE.BoxGeometry(1.5, 90, 1.5);
+            const beam = new THREE.Mesh(beamGeo, beamMat);
             
-            const height = 12 + Math.random() * 10;
-            const boxGeo = new THREE.BoxGeometry(4, height, 4);
-            const box = new THREE.Mesh(boxGeo, pillarMat);
-            box.position.set(x, height / 2, z);
-            scene.add(box);
+            beam.position.set(Math.cos(angle) * 20, 35, Math.sin(angle) * 20);
+            beam.rotation.y = angle;
+            beam.rotation.z = (i % 2 === 0 ? 0.35 : -0.35); // Inclinación hacia adentro formando la cúpula
+            scene.add(beam);
         }
 
-        // Muros perimetrales extraños flotantes o desalineados (muy de Worlds.com)
-        const centralPlatformGeo = new THREE.BoxGeometry(40, 1, 40);
-        const centralPlatform = new THREE.Mesh(centralPlatformGeo, wallMat);
-        centralPlatform.position.set(0, 0.5, 0);
-        scene.add(centralPlatform);
+        // Anillo superior de la cúpula
+        const ringGeo = new THREE.TorusGeometry(18, 1.2, 8, 24);
+        const ring = new THREE.Mesh(ringGeo, beamMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 65;
+        scene.add(ring);
 
-        // Monolito central de teletransporte ficticio
-        const monoGeo = new THREE.CylinderGeometry(2, 3, 15, 8);
-        const mono = new THREE.Mesh(monoGeo, pillarMat);
-        mono.position.set(0, 7.5, 0);
-        scene.add(mono);
+        // 4. EL ENTORNO: Montañas lejanas de fondo (Skybox rústico plano)
+        const mountainGeo = new THREE.CylinderGeometry(190, 190, 50, 16, 1, true);
+        
+        // Canvas para textura de montañas pixeladas estilo 1995
+        const mountCanvas = document.createElement('canvas');
+        mountCanvas.width = 512;
+        mountCanvas.height = 128;
+        const mCtx = mountCanvas.getContext('2d');
+        mCtx.fillStyle = '#5c768d'; // Color base horizonte
+        mCtx.fillRect(0, 0, 512, 128);
+        // Dibujar siluetas de montañas rudimentarias
+        mCtx.fillStyle = '#4a5d70';
+        mCtx.beginPath();
+        mCtx.moveTo(0, 128);
+        for(let x=0; x<=512; x+=40) {
+            mCtx.lineTo(x, 40 + Math.sin(x)*30);
+        }
+        mCtx.lineTo(512, 128);
+        mCtx.fill();
+        
+        const mountTex = new THREE.CanvasTexture(mountCanvas);
+        mountTex.wrapS = THREE.RepeatWrapping;
+        const mountMat = new THREE.MeshBasicMaterial({ map: mountTex, side: THREE.BackSide });
+        const mountains = new THREE.Mesh(mountainGeo, mountMat);
+        mountains.position.y = 15;
+        scene.add(mountains);
 
-        // 5. Posición inicial de la cámara
-        camera.position.set(0, 3, 18);
+        // 5. Posición de la cámara en el centro exacto de GroundZero
+        camera.position.set(0, 3, 10);
 
-        // 6. Controles corregidos (A y D invertidas correctamente)
+        // 6. Controles de Movimiento exactos (WASD + Flechas de repuesto)
         const moveState = { forward: false, backward: false, left: false, right: false };
         
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'w' || e.key === 'W') moveState.forward = true;
-            if (e.key === 's' || e.key === 'S') moveState.backward = true;
-            if (e.key === 'a' || e.key === 'A') moveState.right = true;   // Corregido: A mueve a la derecha relativa o izquierda según perspectiva clásica
-            if (e.key === 'd' || e.key === 'D') moveState.left = true;    // Corregido: D mueve a la izquierda
+            if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') moveState.forward = true;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') moveState.backward = true;
+            if (e.key === 'a' || e.key === 'A') moveState.right = true;
+            if (e.key === 'd' || e.key === 'D') moveState.left = true;
         });
 
         window.addEventListener('keyup', (e) => {
-            if (e.key === 'w' || e.key === 'W') moveState.forward = false;
-            if (e.key === 's' || e.key === 'S') moveState.backward = false;
+            if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') moveState.forward = false;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') moveState.backward = false;
             if (e.key === 'a' || e.key === 'A') moveState.right = false;
             if (e.key === 'd' || e.key === 'D') moveState.left = false;
         });
 
-        // Rotación con ratón
+        // Rotación con ratón dentro del canvas 3D
         let isMouseDown = false;
         let mouseX = 0;
         let cameraRotationY = 0;
 
-        window.addEventListener('mousedown', (e) => { isMouseDown = true; mouseX = e.clientX; });
+        container.addEventListener('mousedown', (e) => { isMouseDown = true; mouseX = e.clientX; });
         window.addEventListener('mouseup', () => { isMouseDown = false; });
         window.addEventListener('mousemove', (e) => {
             if (!isMouseDown) return;
@@ -203,13 +323,13 @@
             mouseX = e.clientX;
         });
 
-        // 7. Bucle de renderizado y física de movimiento
+        // Bucle principal
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
 
             const delta = clock.getDelta();
-            const speed = 12 * delta;
+            const speed = 15 * delta;
 
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
@@ -223,8 +343,7 @@
             if (moveState.left) camera.position.addScaledVector(sideDir, speed);
             if (moveState.right) camera.position.addScaledVector(sideDir, -speed);
 
-            // Mantener altura fija sobre el suelo (vuelo libre clásico de Worlds)
-            camera.position.y = 3;
+            camera.position.y = 3; // Altura fija de caminata
 
             renderer.render(scene, camera);
         }
@@ -232,9 +351,20 @@
         animate();
 
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // Funcionalidad básica del chat inferior
+        const chatInput = document.getElementById('chat-input');
+        const chatOutput = document.getElementById('chat-output');
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim() !== '') {
+                chatOutput.innerHTML += `<br><b>s1rl4ugh5&gt;</b> ${chatInput.value}`;
+                chatInput.value = '';
+                chatOutput.scrollTop = chatOutput.scrollHeight;
+            }
         });
     </script>
 </body>
