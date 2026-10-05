@@ -1,184 +1,161 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>ROOM_01</title>
-
-    <link
-        rel="stylesheet"
-        href="./style.css"
-    >
-
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROOM-01 // Worlds.com Style Metaverso</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
         }
-    }
-    </script>
+        #ui-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #00ff00;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff00;
+            padding: 10px;
+            width: 300px;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-weight: bold;
+        }
+    </style>
 </head>
-
 <body>
 
-<div id="app">
-
-    <canvas id="world"></canvas>
-
-    <div id="boot">
-        <div class="boot-title">ROOM_01</div>
-        <div class="boot-line"></div>
-        <div class="boot-sub">
-            DISTRIBUTED SPATIAL ENVIRONMENT
-        </div>
+    <div id="crosshair">+</div>
+    <div id="ui-container">
+        <h3>[ ROOM-01: LOBBY ]</h3>
+        <p>Estado: Conectado (Offline Mode)</p>
+        <p>Usa las teclas <b>WASD</b> para moverte y el ratón para mirar.</p>
     </div>
 
-    <div id="start">
+    <!-- Importar Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // 1. Configuración básica de la escena
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111122); // Cielo oscuro retro
+        scene.fog = new THREE.FogExp2(0x111122, 0.05);
 
-        <div class="start-mark">
-            R01
-        </div>
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // Desactivar antialias da toque retro
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        <div class="start-title">
-            ROOM_01
-        </div>
+        // 2. Luz ambiental simple (estilo motor gráfico antiguo)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
 
-        <div class="start-sub">
-            A SMALL WORLD INSIDE THE BROWSER
-        </div>
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(10, 20, 10);
+        scene.add(directionalLight);
 
-        <button id="enter">
-            ENTER
-        </button>
+        // 3. Construir la sala (Suuelo ajedrezado típico de Worlds.com y paredes extrañas)
+        const floorGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
+        const floorMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
 
-    </div>
+        // Añadir algunas columnas abstractas y monolitos
+        const pillarMat = new THREE.MeshLambertMaterial({ color: 0x8844aa, flatShading: true });
+        for (let i = 0; i < 15; i++) {
+            const height = Math.random() * 8 + 2;
+            const pillarGeo = new THREE.BoxGeometry(2, height, 2);
+            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+            
+            let x = (Math.random() - 0.5) * 60;
+            let z = (Math.random() - 0.5) * 60;
+            // Evitar el centro exacto
+            if(Math.abs(x) < 5) x = 10;
+            if(Math.abs(z) < 5) z = 10;
 
-    <div id="hud">
+            pillar.position.set(x, height / 2, z);
+            scene.add(pillar);
+        }
 
-        <div id="hud-left">
+        // 4. Posición inicial de la cámara
+        camera.position.set(0, 2, 10);
 
-            <div class="hud-world">
-                <span id="worldName">HOME</span>
-                <span class="dot">●</span>
-                <span id="worldCode">W-01</span>
-            </div>
+        // 5. Controles de Movimiento básicos (WASD)
+        const moveState = { forward: false, backward: false, left: false, right: false };
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'w' || e.key === 'W') moveState.forward = true;
+            if (e.key === 's' || e.key === 'S') moveState.backward = true;
+            if (e.key === 'a' || e.key === 'A') moveState.left = true;
+            if (e.key === 'd' || e.key === 'D') moveState.right = true;
+        });
 
-            <div
-                class="hud-location"
-                id="locationName"
-            >
-                CENTRAL
-            </div>
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'w' || e.key === 'W') moveState.forward = false;
+            if (e.key === 's' || e.key === 'S') moveState.backward = false;
+            if (e.key === 'a' || e.key === 'A') moveState.left = false;
+            if (e.key === 'd' || e.key === 'D') moveState.right = false;
+        });
 
-        </div>
+        // Rotación de cámara con el ratón al hacer clic y arrastrar
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let cameraRotationY = 0;
 
-        <div id="hud-right">
+        window.addEventListener('mousedown', () => { isMouseDown = true; });
+        window.addEventListener('mouseup', () => { isMouseDown = false; });
+        window.addEventListener('mousemove', (e) => {
+            if (!isMouseDown) return;
+            let deltaX = e.movementX || e.clientX - mouseX;
+            cameraRotationY -= deltaX * 0.005;
+            camera.rotation.y = cameraRotationY;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
 
-            <div id="clock">
-                00:00
-            </div>
+        // 6. Bucle de animación
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
 
-            <div id="population">
-                LOCAL / 01
-            </div>
+            const delta = clock.getDelta();
+            const speed = 10 * delta;
 
-        </div>
+            // Vectores de movimiento orientados a donde mira la cámara
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            dir.y = 0; // Mantenerse en el suelo
+            dir.normalize();
 
-    </div>
+            const sideDir = new THREE.Vector3(-dir.z, 0, dir.x);
 
-    <div id="crosshair">
-        <span></span>
-    </div>
+            if (moveState.forward) camera.position.addScaledVector(dir, speed);
+            if (moveState.backward) camera.position.addScaledVector(dir, -speed);
+            if (moveState.left) camera.position.addScaledVector(sideDir, speed);
+            if (moveState.right) camera.position.addScaledVector(sideDir, -speed);
 
-    <div id="interaction">
-        <div id="interactionKey">E</div>
-        <div id="interactionText">
-            INTERACT
-        </div>
-    </div>
+            renderer.render(scene, camera);
+        }
 
-    <div id="worldMenu">
+        animate();
 
-        <div class="menu-header">
-            <span>ROOM_01</span>
-            <span>WORLD INDEX</span>
-        </div>
-
-        <div class="menu-worlds">
-
-            <button
-                class="world-card active"
-                data-world="HOME"
-            >
-                <strong>HOME</strong>
-                <span>W-01</span>
-                <small>
-                    THE FIRST ROOM
-                </small>
-            </button>
-
-            <button
-                class="world-card"
-                data-world="VERDANT"
-            >
-                <strong>VERDANT</strong>
-                <span>W-02</span>
-                <small>
-                    FOREST / LAKE / RUINS
-                </small>
-            </button>
-
-            <button
-                class="world-card"
-                data-world="NULL"
-            >
-                <strong>NULL</strong>
-                <span>W-03</span>
-                <small>
-                    UNSTABLE SPATIAL TEST
-                </small>
-            </button>
-
-        </div>
-
-        <div class="menu-footer">
-            ESC CLOSE
-        </div>
-
-    </div>
-
-    <div id="notification"></div>
-
-    <div id="controls">
-
-        <span>W A S D</span>
-        <span>MOVE</span>
-
-        <span>MOUSE</span>
-        <span>LOOK</span>
-
-        <span>C</span>
-        <span>CAMERA</span>
-
-        <span>E</span>
-        <span>USE</span>
-
-        <span>TAB</span>
-        <span>WORLDS</span>
-
-    </div>
-
-</div>
-
-<script
-    type="module"
-    src="./src/main.js"
-></script>
-
+        // Ajustar pantalla si cambia el tamaño de ventana
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
