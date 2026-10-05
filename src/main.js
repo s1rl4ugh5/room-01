@@ -2216,43 +2216,73 @@ createParticles();
    START SCREEN
    ============================================================ */
 
-document.getElementById(
-    "enter"
-).addEventListener(
+const bootScreen =
+    document.getElementById("boot");
+
+const startScreen =
+    document.getElementById("start");
+
+const enterButton =
+    document.getElementById("enter");
+
+const hud =
+    document.getElementById("hud");
+
+const crosshair =
+    document.getElementById("crosshair");
+
+const controls =
+    document.getElementById("controls");
+
+
+/*
+   Let the boot sequence finish automatically.
+*/
+
+setTimeout(() => {
+
+    bootScreen.classList.add(
+        "hidden"
+    );
+
+}, 1400);
+
+
+/*
+   ENTER WORLD
+*/
+
+enterButton.addEventListener(
     "click",
     () => {
 
-        document.getElementById(
-            "start"
-        ).classList.add(
+        startScreen.classList.add(
             "hidden"
         );
 
-        document.getElementById(
-            "boot"
-        ).classList.add(
+        bootScreen.classList.add(
             "hidden"
         );
 
-        document.getElementById(
-            "hud"
-        ).classList.add(
+        hud.classList.add(
             "visible"
         );
 
-        document.getElementById(
-            "crosshair"
-        ).classList.add(
+        crosshair.classList.add(
             "visible"
         );
 
-        document.getElementById(
-            "controls"
-        ).classList.add(
+        controls.classList.add(
             "visible"
         );
 
         player.active = true;
+
+        /*
+           The browser only allows pointer lock
+           after a user gesture, so this belongs
+           here.
+        */
 
         canvas.requestPointerLock();
     }
