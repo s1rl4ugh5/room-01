@@ -3,139 +3,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROOM-01 // Worlds.com Style Metaverso</title>
+    <title>WORLDS.COM // Replica Scene</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #000;
+            background-color: #050505;
             font-family: 'Courier New', Courier, monospace;
+            user-select: none;
         }
-        #ui-container {
+        #ui {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: #00ff00;
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #00ff00;
-            padding: 10px;
-            width: 300px;
+            bottom: 15px;
+            left: 15px;
+            color: #00ffcc;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #00ffcc;
+            padding: 12px;
+            width: 320px;
             pointer-events: none;
+            box-shadow: 4px 4px 0px #005544;
         }
         #crosshair {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             transform: translate(-50%, -50%);
-            color: #fff;
+            color: #00ffcc;
             font-weight: bold;
+        }
+        #chat-box {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            border: 1px dashed #666;
+            padding: 8px;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
 
     <div id="crosshair">+</div>
-    <div id="ui-container">
-        <h3>[ ROOM-01: LOBBY ]</h3>
-        <p>Estado: Conectado (Offline Mode)</p>
-        <p>Usa las teclas <b>WASD</b> para moverte y el ratón para mirar.</p>
+    <div id="chat-box"><b>Worlds 3D Client v1.1</b><br><span>Sistema de Chat: Conectado...</span></div>
+    <div id="ui">
+        <h3 style="margin:0 0 5px 0; color:#ffff00;">[ MUNDO: GROUND-ZERO ]</h3>
+        <p style="margin:2px 0;">Movimiento: <b>W A S D</b></p>
+        <p style="margin:2px 0;">Cámara: Clic izq. + Arrastrar ratón</p>
     </div>
 
-    <!-- Importar Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        // 1. Configuración básica de la escena
+        // 1. Escena y niebla densa típica de los 90 para ocultar el horizonte
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111122); // Cielo oscuro retro
-        scene.fog = new THREE.FogExp2(0x111122, 0.05);
+        scene.background = new THREE.Color(0x080812);
+        scene.fog = new THREE.FogExp2(0x080812, 0.035);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // Desactivar antialias da toque retro
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // Gráficos pixelados sin suavizado
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. Luz ambiental simple (estilo motor gráfico antiguo)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        // 2. Iluminación cenital y plana (Flat / Lambert)
+        const ambientLight = new THREE.AmbientLight(0x8888aa, 0.8);
         scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(10, 20, 10);
-        scene.add(directionalLight);
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 0.6);
+        dirLight.position.set(20, 40, 20);
+        scene.add(dirLight);
 
-        // 3. Construir la sala (Suuelo ajedrezado típico de Worlds.com y paredes extrañas)
-        const floorGeo = new THREE.PlaneGeometry(100, 100, 20, 20);
-        const floorMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true });
+        // 3. GENERADOR DE TEXTURAS RETRO ESTILO WORLDS.COM (Procedurales)
+        function createRetroTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            if (type === 'floor') {
+                // Suelo tipo baldícula cuadriculada con ruido de los 90
+                ctx.fillStyle = '#444455';
+                ctx.fillRect(0, 0, 128, 128);
+                ctx.fillStyle = '#222233';
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillRect(64, 64, 64, 64);
+                // Añadir rejilla interior
+                ctx.strokeStyle = '#111115';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(0, 0, 128, 128);
+            } else if (type === 'wall') {
+                // Pared metálica/industrial con parches
+                ctx.fillStyle = '#555560';
+                ctx.fillRect(0, 0, 128, 128);
+                ctx.fillStyle = '#3a3a45';
+                ctx.fillRect(10, 10, 108, 108);
+                ctx.fillStyle = '#22222a';
+                ctx.fillRect(20, 20, 88, 88);
+                // Líneas de remaches
+                ctx.fillStyle = '#888899';
+                ctx.fillRect(15, 15, 6, 6);
+                ctx.fillRect(107, 15, 6, 6);
+                ctx.fillRect(15, 107, 6, 6);
+                ctx.fillRect(107, 107, 6, 6);
+            } else if (type === 'pillar') {
+                // Textura abstracta psicodélica o marmórea de baja calidad
+                ctx.fillStyle = '#773355';
+                ctx.fillRect(0, 0, 128, 128);
+                for(let i=0; i<20; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#aa4477' : '#441133';
+                    ctx.fillRect(Math.random()*128, Math.random()*128, Math.random()*40, Math.random()*40);
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        const floorTex = createRetroTexture('floor');
+        floorTex.repeat.set(30, 30);
+        const wallTex = createRetroTexture('wall');
+        wallTex.repeat.set(4, 2);
+        const pillarTex = createRetroTexture('pillar');
+
+        // 4. Construcción del escenario
+        // Suelo gigante
+        const floorGeo = new THREE.PlaneGeometry(300, 300);
+        const floorMat = new THREE.MeshLambertMaterial({ map: floorTex });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // Añadir algunas columnas abstractas y monolitos
-        const pillarMat = new THREE.MeshLambertMaterial({ color: 0x8844aa, flatShading: true });
-        for (let i = 0; i < 15; i++) {
-            const height = Math.random() * 8 + 2;
-            const pillarGeo = new THREE.BoxGeometry(2, height, 2);
-            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-            
-            let x = (Math.random() - 0.5) * 60;
-            let z = (Math.random() - 0.5) * 60;
-            // Evitar el centro exacto
-            if(Math.abs(x) < 5) x = 10;
-            if(Math.abs(z) < 5) z = 10;
+        // Estructura central / monolitos / pasillos extraños característicos de Worlds
+        const wallMat = new THREE.MeshLambertMaterial({ map: wallTex });
+        const pillarMat = new THREE.MeshLambertMaterial({ map: pillarTex });
 
-            pillar.position.set(x, height / 2, z);
-            scene.add(pillar);
+        // Crear una plaza central con estructuras laberínticas
+        for (let i = 0; i < 20; i++) {
+            const angle = (i / 20) * Math.PI * 2;
+            const radius = 25 + Math.random() * 15;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            
+            const height = 12 + Math.random() * 10;
+            const boxGeo = new THREE.BoxGeometry(4, height, 4);
+            const box = new THREE.Mesh(boxGeo, pillarMat);
+            box.position.set(x, height / 2, z);
+            scene.add(box);
         }
 
-        // 4. Posición inicial de la cámara
-        camera.position.set(0, 2, 10);
+        // Muros perimetrales extraños flotantes o desalineados (muy de Worlds.com)
+        const centralPlatformGeo = new THREE.BoxGeometry(40, 1, 40);
+        const centralPlatform = new THREE.Mesh(centralPlatformGeo, wallMat);
+        centralPlatform.position.set(0, 0.5, 0);
+        scene.add(centralPlatform);
 
-        // 5. Controles de Movimiento básicos (WASD)
+        // Monolito central de teletransporte ficticio
+        const monoGeo = new THREE.CylinderGeometry(2, 3, 15, 8);
+        const mono = new THREE.Mesh(monoGeo, pillarMat);
+        mono.position.set(0, 7.5, 0);
+        scene.add(mono);
+
+        // 5. Posición inicial de la cámara
+        camera.position.set(0, 3, 18);
+
+        // 6. Controles corregidos (A y D invertidas correctamente)
         const moveState = { forward: false, backward: false, left: false, right: false };
         
         window.addEventListener('keydown', (e) => {
             if (e.key === 'w' || e.key === 'W') moveState.forward = true;
             if (e.key === 's' || e.key === 'S') moveState.backward = true;
-            if (e.key === 'a' || e.key === 'A') moveState.left = true;
-            if (e.key === 'd' || e.key === 'D') moveState.right = true;
+            if (e.key === 'a' || e.key === 'A') moveState.right = true;   // Corregido: A mueve a la derecha relativa o izquierda según perspectiva clásica
+            if (e.key === 'd' || e.key === 'D') moveState.left = true;    // Corregido: D mueve a la izquierda
         });
 
         window.addEventListener('keyup', (e) => {
             if (e.key === 'w' || e.key === 'W') moveState.forward = false;
             if (e.key === 's' || e.key === 'S') moveState.backward = false;
-            if (e.key === 'a' || e.key === 'A') moveState.left = false;
-            if (e.key === 'd' || e.key === 'D') moveState.right = false;
+            if (e.key === 'a' || e.key === 'A') moveState.right = false;
+            if (e.key === 'd' || e.key === 'D') moveState.left = false;
         });
 
-        // Rotación de cámara con el ratón al hacer clic y arrastrar
+        // Rotación con ratón
         let isMouseDown = false;
-        let mouseX = 0, mouseY = 0;
+        let mouseX = 0;
         let cameraRotationY = 0;
 
-        window.addEventListener('mousedown', () => { isMouseDown = true; });
+        window.addEventListener('mousedown', (e) => { isMouseDown = true; mouseX = e.clientX; });
         window.addEventListener('mouseup', () => { isMouseDown = false; });
         window.addEventListener('mousemove', (e) => {
             if (!isMouseDown) return;
-            let deltaX = e.movementX || e.clientX - mouseX;
-            cameraRotationY -= deltaX * 0.005;
+            let deltaX = e.clientX - mouseX;
+            cameraRotationY -= deltaX * 0.004;
             camera.rotation.y = cameraRotationY;
             mouseX = e.clientX;
-            mouseY = e.clientY;
         });
 
-        // 6. Bucle de animación
+        // 7. Bucle de renderizado y física de movimiento
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
 
             const delta = clock.getDelta();
-            const speed = 10 * delta;
+            const speed = 12 * delta;
 
-            // Vectores de movimiento orientados a donde mira la cámara
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
-            dir.y = 0; // Mantenerse en el suelo
+            dir.y = 0;
             dir.normalize();
 
             const sideDir = new THREE.Vector3(-dir.z, 0, dir.x);
@@ -145,12 +223,14 @@
             if (moveState.left) camera.position.addScaledVector(sideDir, speed);
             if (moveState.right) camera.position.addScaledVector(sideDir, -speed);
 
+            // Mantener altura fija sobre el suelo (vuelo libre clásico de Worlds)
+            camera.position.y = 3;
+
             renderer.render(scene, camera);
         }
 
         animate();
 
-        // Ajustar pantalla si cambia el tamaño de ventana
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
