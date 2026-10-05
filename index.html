@@ -3,92 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GroundZero Builder</title>
+    <title>S1RL4UGH5 // Retro Metaverse Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #000;
-            font-family: 'MS Sans Serif', Arial, sans-serif;
+            background-color: #05050a;
+            font-family: 'Courier New', Courier, monospace;
             user-select: none;
         }
         #canvas-container {
             position: absolute;
-            top: 0; left: 0; right: 140px; bottom: 85px;
+            top: 0; left: 0; right: 260px; bottom: 80px;
         }
         #sidebar {
             position: absolute;
-            top: 0; right: 0; width: 140px; height: 100%;
-            background: linear-gradient(to right, #0011bb, #2244ff);
-            border-left: 2px solid #88aaff;
-            display: flex; flex-direction: column; padding: 5px; box-sizing: border-box; z-index: 10;
+            top: 0; right: 0; width: 260px; height: 100%;
+            background: linear-gradient(135deg, #111118, #1a1a24);
+            border-left: 2px solid #444455;
+            display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; z-index: 10;
+            overflow-y: auto;
         }
-        .worlds-btn {
-            background: linear-gradient(to bottom, #d0d0d0, #808080);
-            border: 2px outset #ffffff; color: #000; font-size: 11px; font-weight: bold;
-            padding: 6px 4px; margin-bottom: 4px; text-align: center; cursor: pointer;
+        .retro-btn {
+            background: linear-gradient(to bottom, #333344, #22222a);
+            border: 2px outset #555577; color: #00ffcc; font-size: 11px; font-weight: bold;
+            padding: 8px 6px; margin-bottom: 6px; text-align: center; cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
         }
-        .worlds-btn:active { border: 2px inset #ffffff; }
-        .sidebar-section { color: #ffff00; font-size: 10px; margin-top: 10px; margin-bottom: 2px; border-bottom: 1px solid #ffff00; }
+        .retro-btn:active { border: 2px inset #555577; background: #1a1a22; }
+        .panel-section { color: #ffff00; font-size: 11px; margin-top: 12px; margin-bottom: 4px; border-bottom: 1px dashed #555; padding-bottom: 2px; }
         
-        /* Panel de Construcción de Prims (Estilo Constructor Retro) */
         #builder-panel {
-            background: rgba(0, 0, 80, 0.9);
-            border: 2px solid #00ffcc;
-            padding: 6px;
-            margin-top: 5px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid #333344;
+            padding: 8px;
+            margin-top: 4px;
             color: #fff;
-            font-size: 10px;
+            font-size: 11px;
         }
-
         #bottom-console {
-            position: absolute; bottom: 0; left: 0; right: 0; height: 85px;
-            background: #0000aa; border-top: 2px solid #fff; display: flex; flex-direction: column; z-index: 10;
+            position: absolute; bottom: 0; left: 0; right: 260px; height: 80px;
+            background: #0c0c14; border-top: 2px solid #333344; display: flex; flex-direction: column; z-index: 10;
         }
         #chat-output {
-            flex-grow: 1; background: #ffffcc; color: #000; font-family: 'Courier New', monospace;
-            font-size: 12px; padding: 4px 8px; overflow-y: auto; border: 2px inset #808080; margin: 4px;
+            flex-grow: 1; background: #050508; color: #00ffcc; font-family: 'Courier New', monospace;
+            font-size: 11px; padding: 4px 8px; overflow-y: auto; border: 1px inset #222; margin: 4px;
         }
         #chat-input-row { display: flex; padding: 0 4px 4px 4px; }
-        #chat-input { flex-grow: 1; background: #fff; border: 2px inset #808080; height: 20px; padding: 0 4px; font-size: 12px; }
+        #chat-input { flex-grow: 1; background: #111; color: #fff; border: 1px solid #444; height: 22px; padding: 0 6px; font-size: 11px; font-family: monospace; }
         #top-titlebar {
-            position: absolute; top: 0; left: 0; right: 140px; height: 22px;
-            background: linear-gradient(to right, #000080, #1084d0); color: white;
-            font-size: 12px; padding-left: 6px; line-height: 22px; font-weight: bold; z-index: 10;
+            position: absolute; top: 0; left: 0; right: 260px; height: 24px;
+            background: linear-gradient(to right, #111122, #2a2a44); color: #00ffcc;
+            font-size: 11px; padding-left: 8px; line-height: 24px; font-weight: bold; z-index: 10;
+            border-bottom: 1px solid #444;
         }
+        #crosshair {
+            position: absolute; top: calc(50% - 40px); left: calc(50% - 130px);
+            width: 8px; height: 8px; transform: translate(-50%, -50%);
+            color: #00ffcc; font-weight: bold; pointer-events: none; z-index: 5;
+        }
+        .prop-control { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 10px; color: #aaa; }
+        .prop-control input { width: 55px; background: #222; color: #00ffcc; border: 1px solid #444; text-align: right; }
     </style>
 </head>
 <body>
-
-    <div id="top-titlebar">WorldsPlayer - GroundZero [Avatar & Builder Active]</div>
+    <div id="top-titlebar">S1RL4UGH5 // RETRO METAVERSE STUDIO v2.5</div>
+    <div id="crosshair">+</div>
     <div id="canvas-container"></div>
 
     <div id="sidebar">
-        <div class="worlds-btn">Help</div>
-        <div class="worlds-btn">Teleport</div>
-        <div class="worlds-btn" style="color: #ff0000;">VIP</div>
-        
-        <div class="sidebar-section">BUILDER (PRIMS)</div>
+        <div class="panel-section">CONSTRUCTOR (PRIMS)</div>
         <div id="builder-panel">
-            <p style="margin:2px 0;">Crear Objeto:</p>
-            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cube')">+ Cubo Prim</button>
-            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('sphere')">+ Esfera Prim</button>
-            <button class="worlds-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cylinder')">+ Cilindro Prim</button>
+            <div style="margin-bottom:6px;">Crear Primitiva:</div>
+            <button class="retro-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cube')">+ Cubo</button>
+            <button class="retro-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('sphere')">+ Esfera</button>
+            <button class="retro-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cylinder')">+ Cilindro</button>
+            <button class="retro-btn" style="width:100%; margin:2px 0;" onclick="spawnPrim('cone')">+ Cono</button>
         </div>
 
-        <div class="sidebar-section">FRIENDS ONLINE</div>
-        <div style="color: #fff; font-size: 10px; overflow-y: auto; height: 80px;">
-            - s1rl4ugh5 (Tú)<br>- T4k3YOurPill5<br>- M15T1FY_<br>- SirGrandpa[cite: 2]
+        <div class="panel-section">INSPECTOR / EDICIÓN</div>
+        <div id="inspector-panel" style="background: rgba(0,0,0,0.4); border: 1px solid #333; padding: 8px; font-size: 11px; color: #888;">
+            <p id="selected-info" style="margin:0 0 6px 0; color:#ffaa00;">Ningún objeto seleccionado. Haz clic en un prim.</p>
+            <div id="transform-controls" style="display:none;">
+                <div class="prop-control"><span>Pos X:</span><input type="number" id="pos-x" step="0.5" onchange="updateSelectedTransform()"></div>
+                <div class="prop-control"><span>Pos Y:</span><input type="number" id="pos-y" step="0.5" onchange="updateSelectedTransform()"></div>
+                <div class="prop-control"><span>Pos Z:</span><input type="number" id="pos-z" step="0.5" onchange="updateSelectedTransform()"></div>
+                <div class="prop-control" style="margin-top:6px;"><span>Escala X:</span><input type="number" id="scale-x" step="0.1" min="0.1" onchange="updateSelectedScale()"></div>
+                <div class="prop-control"><span>Escala Y:</span><input type="number" id="scale-y" step="0.1" min="0.1" onchange="updateSelectedScale()"></div>
+                <div class="prop-control"><span>Escala Z:</span><input type="number" id="scale-z" step="0.1" min="0.1" onchange="updateSelectedScale()"></div>
+                <div class="prop-control" style="margin-top:6px;"><span>Rotación Y:</span><input type="number" id="rot-y" step="5" onchange="updateSelectedRotation()"></div>
+                <button class="retro-btn" style="width:100%; margin-top:8px; background:#552222; border-color:#884444; color:#ffcccc;" onclick="deleteSelectedPrim()">Eliminar Objeto</button>
+            </div>
         </div>
-        <div class="worlds-btn" style="margin-top:auto;">Universe Map</div>
+
+        <div class="panel-section">MUNDO</div>
+        <button class="retro-btn" onclick="saveUniverse()">Guardar Cambios</button>
+        <button class="retro-btn" onclick="clearUniverse()">Reiniciar Todo</button>
+        
+        <div class="panel-section" style="margin-top:auto;">ESTADO</div>
+        <div style="color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.6); padding: 6px; border: 1px solid #222;">
+            Controles: W A S D (Mover)<br>Ratón: Girar cámara<br>Clic Prim: Seleccionar/Editar
+        </div>
     </div>
 
     <div id="bottom-console">
         <div id="chat-output">
-            <b>WORLDMASTER&gt;</b> ¡Sistema de construcción de Prims activo! Selecciona un prim en el panel lateral para colocarlo frente a ti.
+            <b>SYSTEM&gt;</b> Entorno personal cargado. Bienvenido a tu metaverso exclusivo.
         </div>
         <div id="chat-input-row">
-            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." />
+            <input type="text" id="chat-input" placeholder="Escribe un comando o mensaje y pulsa Enter..." />
         </div>
     </div>
 
@@ -97,86 +121,171 @@
         const container = document.getElementById('canvas-container');
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x3a88ee); // Cielo clásico
+        scene.background = new THREE.Color(0x0e1118); // Cielo crepuscular retro
+        scene.fog = new THREE.FogExp2(0x0e1118, 0.012);
 
         const camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
         container.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-        dirLight.position.set(10, 30, 20);
+        scene.add(new THREE.AmbientLight(0x7788aa, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 0.9);
+        dirLight.position.set(40, 70, 40);
         scene.add(dirLight);
 
-        // --- 1. SUELO DE BALDOSAS ORNAMENTADAS DE GROUNDZERO ---
         function createFloorTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#0b5394'; ctx.fillRect(0, 0, 256, 256);
-            ctx.strokeStyle = '#073763'; ctx.lineWidth = 8; ctx.strokeRect(0, 0, 256, 256);
-            ctx.fillStyle = '#16487c';
+            ctx.fillStyle = '#1a334d'; ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#0f1f33'; ctx.lineWidth = 6; ctx.strokeRect(0, 0, 256, 256);
+            ctx.fillStyle = '#264d73';
             ctx.beginPath(); ctx.moveTo(128, 20); ctx.lineTo(236, 128); ctx.lineTo(128, 236); ctx.lineTo(20, 128); ctx.fill();
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
             return texture;
         }
+
+        function createDesertTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#7a5532'; ctx.fillRect(0, 0, 128, 128);
+            for(let i=0; i<300; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#94693f' : '#5c3e23';
+                ctx.fillRect(Math.random()*128, Math.random()*128, 2, 2);
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
         const floorTex = createFloorTexture(); floorTex.repeat.set(30, 30);
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({ map: floorTex }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // --- 2. INFRAESTRUCTURA DE EDIFICIO Y AUDITORIO ---
-        // Edificio perimetral industrial
-        const buildingMat = new THREE.MeshLambertMaterial({ color: 0x666677 });
-        const building = new THREE.Mesh(new THREE.BoxGeometry(120, 35, 15), buildingMat);
-        building.position.set(0, 17.5, -60);
-        scene.add(building);
+        // Desierto infinito alrededor de las baldosas
+        const desertTex = createDesertTexture(); desertTex.repeat.set(60, 60);
+        const desert = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshLambertMaterial({ map: desertTex }));
+        desert.position.y = -0.2;
+        desert.rotation.x = -Math.PI / 2;
+        scene.add(desert);
 
-        // Letrero del "Auditorium" idéntico a la referencia
-        function createAuditoriumSign() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 256; canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 256, 64);
-            ctx.fillStyle = '#0000aa'; ctx.font = 'bold 32px Arial'; ctx.fillText('Auditorium', 20, 42);
-            const tex = new THREE.CanvasTexture(canvas);
-            return new THREE.MeshBasicMaterial({ map: tex });
+        // Dunas lejanas en el horizonte del desierto
+        const duneMat = new THREE.MeshLambertMaterial({ color: 0x6e4a2b });
+        for(let i=0; i<16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const dist = 450 + Math.random() * 80;
+            const dune = new THREE.Mesh(new THREE.ConeGeometry(90, 40, 5), duneMat);
+            dune.position.set(Math.cos(angle)*dist, 10, Math.sin(angle)*dist);
+            scene.add(dune);
         }
-        const sign = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 1), createAuditoriumSign());
-        sign.position.set(-25, 12, -52);
-        scene.add(sign);
 
-        // Cúpula superior y vigas diagonales
-        const beamMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        for (let i = 0; i < 8; i++) {
-            const angle = (i / 8) * Math.PI * 2;
-            const beam = new THREE.Mesh(new THREE.BoxGeometry(1.5, 80, 1.5), beamMat);
-            beam.position.set(Math.cos(angle) * 25, 30, Math.sin(angle) * 25);
-            beam.rotation.y = angle; beam.rotation.z = (i % 2 === 0 ? 0.3 : -0.3);
+        const steelMat = new THREE.MeshLambertMaterial({ color: 0x2b2b36, roughness: 0.8 });
+        const numBeams = 14;
+        for (let i = 0; i < numBeams; i++) {
+            const angle = (i / numBeams) * Math.PI * 2;
+            const beam = new THREE.Mesh(new THREE.BoxGeometry(1.4, 85, 1.4), steelMat);
+            beam.position.set(Math.cos(angle) * 40, 32, Math.sin(angle) * 40);
+            beam.rotation.y = angle; 
+            beam.rotation.z = (i % 2 === 0 ? 0.32 : -0.32);
             scene.add(beam);
         }
 
-        // --- 3. CREACIÓN DEL AVATAR DEL JUGADOR (Visible en tercera persona) ---
+        // Anillo superior de acero de la cúpula
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(30, 1.2, 8, 30), steelMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 58;
+        scene.add(ring);
+
+        const auditoriumGroup = new THREE.Group();
+        auditoriumGroup.position.set(0, 0, -55);
+
+        // Letrero exterior 'Auditorium'
+        const signCanvas = document.createElement('canvas');
+        signCanvas.width = 512; signCanvas.height = 128;
+        const sCtx = signCanvas.getContext('2d');
+        sCtx.fillStyle = '#111'; sCtx.fillRect(0,0,512,128);
+        sCtx.strokeStyle = '#00ffcc'; sCtx.lineWidth = 8; sCtx.strokeRect(4,4,504,120);
+        sCtx.fillStyle = '#00ffcc'; sCtx.font = 'bold 50px Courier New'; sCtx.textAlign = 'center';
+        sCtx.fillText('AUDITORIUM', 256, 82);
+        const signTex = new THREE.CanvasTexture(signCanvas);
+        const signMesh = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 1), new THREE.MeshBasicMaterial({ map: signTex }));
+        signMesh.position.set(0, 18, 26);
+        auditoriumGroup.add(signMesh);
+
+        // Paredes del auditorio
+        const wallMat = new THREE.MeshLambertMaterial({ color: 0x242433 });
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(60, 26, 2), wallMat);
+        backWall.position.set(0, 13, -30);
+        auditoriumGroup.add(backWall);
+
+        const sideWall1 = new THREE.Mesh(new THREE.BoxGeometry(2, 26, 60), wallMat);
+        sideWall1.position.set(-30, 13, 0);
+        auditoriumGroup.add(sideWall1);
+
+        const sideWall2 = new THREE.Mesh(new THREE.BoxGeometry(2, 26, 60), wallMat);
+        sideWall2.position.set(30, 13, 0);
+        auditoriumGroup.add(sideWall2);
+
+        // Techo interior
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(62, 2, 62), wallMat);
+        ceiling.position.set(0, 26, 0);
+        auditoriumGroup.add(ceiling);
+
+        // Luces empotradas en el techo del auditorio
+        for(let lx = -20; lx <= 20; lx += 20) {
+            for(let lz = -20; lz <= 20; lz += 20) {
+                const lightMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 3.5), new THREE.MeshBasicMaterial({ color: 0xffffaa }));
+                lightMesh.position.set(lx, 24.8, lz);
+                auditoriumGroup.add(lightMesh);
+
+                const pointLight = new THREE.PointLight(0xffffaa, 0.6, 25);
+                pointLight.position.set(lx, 22, lz);
+                auditoriumGroup.add(pointLight);
+            }
+        }
+
+        // Filas de asientos dentro del auditorio
+        const seatMat = new THREE.MeshLambertMaterial({ color: 0x661111 });
+        for(let row = 0; row < 6; row++) {
+            for(let col = -4; col <= 4; col++) {
+                const seat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.4, 2.6), seatMat);
+                seat.position.set(col * 4.5, 1 + (row * 0.7), -12 + (row * 4.5));
+                auditoriumGroup.add(seat);
+
+                const back = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 0.4), seatMat);
+                back.position.set(col * 4.5, 2.3 + (row * 0.7), -13.5 + (row * 4.5));
+                auditoriumGroup.add(back);
+            }
+        }
+
+        // Escenario del auditorio
+        const stage = new THREE.Mesh(new THREE.BoxGeometry(36, 1.8, 12), new THREE.MeshLambertMaterial({ color: 0x3d2b1f }));
+        stage.position.set(0, 0.9, -22);
+        auditoriumGroup.add(stage);
+
+        scene.add(auditoriumGroup);
+
         const avatarGroup = new THREE.Group();
         
-        // Cuerpo del avatar (estilo bloques retro estilo Worlds)
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.6), new THREE.MeshLambertMaterial({color: 0xcc3333}));
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.6), new THREE.MeshLambertMaterial({color: 0x1f4e78}));
         torso.position.y = 1.8;
         avatarGroup.add(torso);
 
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: 0xffccaa}));
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: 0xffd1b3}));
         head.position.y = 3.0;
         avatarGroup.add(head);
 
-        // Nombre flotante encima del avatar
         function createNameTag(name) {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 64;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0,0,256,64);
-            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 24px Courier New'; ctx.textAlign = 'center';
             ctx.fillText(name, 128, 40);
             const tex = new THREE.CanvasTexture(canvas);
             const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
@@ -187,36 +296,149 @@
         }
         avatarGroup.add(createNameTag('s1rl4ugh5'));
         scene.add(avatarGroup);
+        avatarGroup.position.set(0, 0, 18);
 
-        // --- 4. SISTEMA DE CONSTRUCCIÓN DE PRIMS ---
-        const builtPrims = [];
-        function spawnPrim(type) {
+        let customPrims = [];
+        let selectedPrim = null;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function spawnPrim(type, data = null) {
             let geom;
             if (type === 'cube') geom = new THREE.BoxGeometry(2, 2, 2);
             else if (type === 'sphere') geom = new THREE.SphereGeometry(1.2, 16, 16);
-            else geom = new THREE.CylinderGeometry(1, 1, 3, 16);
+            else if (type === 'cylinder') geom = new THREE.CylinderGeometry(1, 1, 3, 16);
+            else geom = new THREE.ConeGeometry(1.2, 3, 16);
 
-            // Material brillante típico de objetos colocados en mundos virtuales
-            const mat = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+            const color = data ? data.color : Math.random() * 0xffffff;
+            const mat = new THREE.MeshLambertMaterial({ color: color });
             const prim = new THREE.Mesh(geom, mat);
 
-            // Colocar el prim justo en frente del avatar
-            const forward = new THREE.Vector3(0, 0, -5).applyAxisAngle(new THREE.Vector3(0,1,0), avatarRotationY);
-            prim.position.copy(avatarGroup.position).add(forward);
-            prim.position.y += 1;
+            if (data) {
+                prim.position.set(data.x, data.y, data.z);
+                prim.scale.set(data.scaleX, data.scaleY, data.scaleZ);
+                prim.rotation.y = data.rotY || 0;
+                prim.userData = { type: type, color: color };
+            } else {
+                const forward = new THREE.Vector3(0, 0, -6).applyAxisAngle(new THREE.Vector3(0,1,0), avatarRotationY);
+                prim.position.copy(avatarGroup.position).add(forward);
+                prim.position.y += 1.5;
+                prim.userData = { type: type, color: color };
+            }
 
             scene.add(prim);
-            builtPrims.push(prim);
-            
-            document.getElementById('chat-output').innerHTML += `<br><span style="color:green;"><b>SISTEMA&gt;</b> Prim (${type}) creado con éxito en el mundo.</span>`;
-            document.getElementById('chat-output').scrollTop = document.getElementById('chat-output').scrollHeight;
+            customPrims.push(prim);
+            selectPrim(prim);
+            logSystemMessage(`Objeto (${type}) creado con éxito.`);
         }
 
-        // --- 5. MOVIMIENTO Y CÁMARA EN TERCERA PERSONA ---
+        window.addEventListener('click', (e) => {
+            if (e.clientX > window.innerWidth - 260 || e.clientY > window.innerHeight - 80 || e.clientY < 24) return;
+            
+            mouse.x = (e.clientX / (window.innerWidth - 260)) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(customPrims);
+
+            if (intersects.length > 0) {
+                selectPrim(intersects[0].object);
+            }
+        });
+
+        function selectPrim(prim) {
+            selectedPrim = prim;
+            document.getElementById('selected-info').innerText = `Objeto Seleccionado: ${prim.userData.type.toUpperCase()}`;
+            document.getElementById('transform-controls').style.display = 'block';
+            
+            document.getElementById('pos-x').value = prim.position.x.toFixed(1);
+            document.getElementById('pos-y').value = prim.position.y.toFixed(1);
+            document.getElementById('pos-z').value = prim.position.z.toFixed(1);
+            document.getElementById('scale-x').value = prim.scale.x.toFixed(1);
+            document.getElementById('scale-y').value = prim.scale.y.toFixed(1);
+            document.getElementById('scale-z').value = prim.scale.z.toFixed(1);
+            document.getElementById('rot-y').value = (prim.rotation.y * (180 / Math.PI)).toFixed(0);
+        }
+
+        function updateSelectedTransform() {
+            if (!selectedPrim) return;
+            selectedPrim.position.x = parseFloat(document.getElementById('pos-x').value) || 0;
+            selectedPrim.position.y = parseFloat(document.getElementById('pos-y').value) || 0;
+            selectedPrim.position.z = parseFloat(document.getElementById('pos-z').value) || 0;
+        }
+
+        function updateSelectedScale() {
+            if (!selectedPrim) return;
+            const sx = Math.max(0.1, parseFloat(document.getElementById('scale-x').value) || 1);
+            const sy = Math.max(0.1, parseFloat(document.getElementById('scale-y').value) || 1);
+            const sz = Math.max(0.1, parseFloat(document.getElementById('scale-z').value) || 1);
+            selectedPrim.scale.set(sx, sy, sz);
+        }
+
+        function updateSelectedRotation() {
+            if (!selectedPrim) return;
+            const deg = parseFloat(document.getElementById('rot-y').value) || 0;
+            selectedPrim.rotation.y = deg * (Math.PI / 180);
+        }
+
+        function deleteSelectedPrim() {
+            if (!selectedPrim) return;
+            scene.remove(selectedPrim);
+            customPrims = customPrims.filter(p => p !== selectedPrim);
+            selectedPrim = null;
+            document.getElementById('selected-info').innerText = 'Ningún objeto seleccionado.';
+            document.getElementById('transform-controls').style.display = 'none';
+            logSystemMessage('Objeto eliminado correctamente.');
+        }
+
+        function saveUniverse() {
+            const dataToSave = customPrims.map(p => ({
+                type: p.userData.type,
+                x: p.position.x,
+                y: p.position.y,
+                z: p.position.z,
+                scaleX: p.scale.x,
+                scaleY: p.scale.y,
+                scaleZ: p.scale.z,
+                rotY: p.rotation.y,
+                color: p.userData.color
+            }));
+            localStorage.setItem('s1rl4ugh5_metaverse_prims', JSON.stringify(dataToSave));
+            logSystemMessage('¡Cambios guardados con éxito en el almacenamiento local!');
+        }
+
+        function loadUniverse() {
+            const saved = localStorage.getItem('s1rl4ugh5_metaverse_prims');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    parsed.forEach(item => spawnPrim(item.type, item));
+                    logSystemMessage(`Se cargaron ${parsed.length} objetos guardados.`);
+                } catch(e) { console.error(e); }
+            }
+        }
+
+        function clearUniverse() {
+            customPrims.forEach(p => scene.remove(p));
+            customPrims = [];
+            localStorage.removeItem('s1rl4ugh5_metaverse_prims');
+            selectedPrim = null;
+            document.getElementById('selected-info').innerText = 'Ningún objeto seleccionado.';
+            document.getElementById('transform-controls').style.display = 'none';
+            logSystemMessage('Entorno restablecido por completo.');
+        }
+
+        function logSystemMessage(msg) {
+            const output = document.getElementById('chat-output');
+            output.innerHTML += `<br><b>SYSTEM&gt;</b> ${msg}`;
+            output.scrollTop = output.scrollHeight;
+        }
+
         const moveState = { forward: false, backward: false, left: false, right: false };
         let avatarRotationY = 0;
 
         window.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') return;
             if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') moveState.forward = true;
             if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') moveState.backward = true;
             if (e.key === 'a' || e.key === 'A') moveState.right = true;
@@ -241,14 +463,12 @@
             mouseX = e.clientX;
         });
 
-        avatarGroup.position.set(0, 0, 10);
-
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
 
             const delta = clock.getDelta();
-            const speed = 12 * delta;
+            const speed = 15 * delta;
 
             const moveDir = new THREE.Vector3(0, 0, 0);
             const forwardVec = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
@@ -264,14 +484,16 @@
                 avatarGroup.position.addScaledVector(moveDir, speed);
             }
 
-            // Cámara en tercera persona siguiendo al avatar de cerca
-            const camOffset = new THREE.Vector3(0, 4, 8).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
+            // Cámara en tercera persona suave
+            const camOffset = new THREE.Vector3(0, 4, 10).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatarRotationY);
             camera.position.copy(avatarGroup.position).add(camOffset);
             camera.lookAt(avatarGroup.position.clone().add(new THREE.Vector3(0, 2, 0)));
 
             renderer.render(scene, camera);
         }
 
+        // Cargar almacenamiento previo al iniciar
+        loadUniverse();
         animate();
 
         window.addEventListener('resize', () => {
@@ -280,13 +502,12 @@
             renderer.setSize(container.clientWidth, container.clientHeight);
         });
 
+        // Consola de chat interactiva
         const chatInput = document.getElementById('chat-input');
-        const chatOutput = document.getElementById('chat-output');
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && chatInput.value.trim() !== '') {
-                chatOutput.innerHTML += `<br><b>s1rl4ugh5&gt;</b> ${chatInput.value}`;
+                logSystemMessage(`s1rl4ugh5: ${chatInput.value}`);
                 chatInput.value = '';
-                chatOutput.scrollTop = chatOutput.scrollHeight;
             }
         });
     </script>
